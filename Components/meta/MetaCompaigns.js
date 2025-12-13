@@ -1,7 +1,9 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
   RefreshControl,
   SafeAreaView,
@@ -11,70 +13,125 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+
+const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
 
 export default function MetaCompaigns() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
+  const [campaigns, setCampaigns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [adAccountId, setAdAccountId] = useState(null);
+  const [isConnected, setIsConnected] = useState(true);
 
-  // Sample campaign data
-  const [campaigns, setCampaigns] = useState([
-    {
-      id: "1",
-      name: "Summer Sale Campaign",
-      status: "active",
-      budget: "$500",
-      spent: "$320",
-      impressions: "45.2K",
-      clicks: "2.1K",
-      ctr: "4.6%",
-      startDate: "Jun 15, 2023",
-      endDate: "Jul 15, 2023",
-    },
-    {
-      id: "2",
-      name: "New Product Launch",
-      status: "paused",
-      budget: "$1200",
-      spent: "$850",
-      impressions: "78.5K",
-      clicks: "3.8K",
-      ctr: "4.8%",
-      startDate: "Jul 1, 2023",
-      endDate: "Aug 1, 2023",
-    },
-    {
-      id: "3",
-      name: "Holiday Promotion",
-      status: "completed",
-      budget: "$2000",
-      spent: "$2000",
-      impressions: "120.4K",
-      clicks: "5.6K",
-      ctr: "4.7%",
-      startDate: "Dec 1, 2022",
-      endDate: "Dec 31, 2022",
-    },
-    {
-      id: "4",
-      name: "Brand Awareness",
-      status: "active",
-      budget: "$800",
-      spent: "$420",
-      impressions: "65.3K",
-      clicks: "1.8K",
-      ctr: "2.8%",
-      startDate: "Jul 10, 2023",
-      endDate: "Aug 10, 2023",
-    },
-  ]);
+  useEffect(() => {
+    loadAdAccountId();
+    fetchCampaigns();
+  }, []);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    // Simulate data refresh
-    setTimeout(() => {
+  const loadAdAccountId = async () => {
+    try {
+      const accountId = await AsyncStorage.getItem("fb_ad_account_id");
+      setAdAccountId(accountId);
+    } catch (error) {
+      console.error("Error loading ad account ID:", error);
+    }
+  };
+
+  const fetchCampaigns = async () => {
+    try {
+      setLoading(true);
+      const accessToken = await AsyncStorage.getItem("fb_access_token");
+      if (!accessToken) {
+        // Token not found - user disconnected, go back to connect screen
+        setIsConnected(false);
+        Alert.alert("Disconnected", "Your Meta account has been disconnected. Please reconnect to continue.");
+        router.replace("/MetaWorker");
+        return;
+      }
+      setIsConnected(true);
+
+      const accountId = adAccountId || (await AsyncStorage.getItem("fb_ad_account_id"));
+      if (!accountId) {
+        // Try to get ad accounts first
+        const accountsResponse = await axios.get(`${API_BASE_URL}/campaigns`, {
+          headers: {
+            "x-fb-access-token": accessToken,
+          },
+        });
+
+        if (accountsResponse.data.success && accountsResponse.data.adAccounts?.data?.[0]?.id) {
+          const firstAccountId = accountsResponse.data.adAccounts.data[0].id;
+          await AsyncStorage.setItem("fb_ad_account_id", firstAccountId);
+          setAdAccountId(firstAccountId);
+          await fetchCampaignsForAccount(firstAccountId, accessToken);
+        } else {
+          setCampaigns([]);
+        }
+      } else {
+        await fetchCampaignsForAccount(accountId, accessToken);
+      }
+    } catch (error) {
+      console.error("Error fetching campaigns:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.fb?.message ||
+          error.response?.data?.message ||
+          "Failed to fetch campaigns"
+      );
+      setCampaigns([]);
+    } finally {
+      setLoading(false);
       setRefreshing(false);
-    }, 1500);
+    }
+  };
+
+  const fetchCampaignsForAccount = async (accountId, accessToken) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/campaigns/all`, {
+        params: {
+          adAccountId: accountId,
+        },
+        headers: {
+          "x-fb-access-token": accessToken,
+        },
+      });
+
+      if (response.data.success && response.data.campaigns?.data) {
+        const formattedCampaigns = response.data.campaigns.data.map((campaign) => ({
+          id: campaign.id,
+          name: campaign.name || "Unnamed Campaign",
+          status: campaign.status?.toLowerCase() || "unknown",
+          effectiveStatus: campaign.effective_status?.toLowerCase() || campaign.status?.toLowerCase() || "unknown",
+          objective: campaign.objective || "N/A",
+          createdTime: campaign.created_time,
+          updatedTime: campaign.updated_time,
+        }));
+        setCampaigns(formattedCampaigns);
+      } else {
+        setCampaigns([]);
+      }
+    } catch (error) {
+      console.error("Error fetching campaigns for account:", error);
+      throw error;
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    // Check token before refreshing
+    const token = await AsyncStorage.getItem("fb_access_token");
+    if (!token) {
+      setIsConnected(false);
+      setRefreshing(false);
+      Alert.alert("Disconnected", "Your Meta account has been disconnected. Please reconnect to continue.");
+      router.replace("/MetaWorker");
+      return;
+    }
+    fetchCampaigns();
   };
 
   const filteredCampaigns = campaigns.filter((campaign) => {
@@ -82,114 +139,161 @@ export default function MetaCompaigns() {
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
 
+    const status = campaign.effectiveStatus || campaign.status;
+
     if (activeTab === "all") return matchesSearch;
     if (activeTab === "active")
-      return matchesSearch && campaign.status === "active";
+      return matchesSearch && (status === "active" || status === "campaign_active");
     if (activeTab === "paused")
-      return matchesSearch && campaign.status === "paused";
+      return matchesSearch && (status === "paused" || status === "campaign_paused");
     if (activeTab === "completed")
-      return matchesSearch && campaign.status === "completed";
+      return matchesSearch && (status === "archived" || status === "deleted");
 
     return matchesSearch;
   });
 
   const getStatusColor = (status) => {
-    switch (status) {
-      case "active":
-        return "#4CAF50";
-      case "paused":
-        return "#FF9800";
-      case "completed":
-        return "#9E9E9E";
-      default:
-        return "#9E9E9E";
+    const normalizedStatus = (status || "").toLowerCase();
+    if (normalizedStatus === "active" || normalizedStatus === "campaign_active") {
+      return "#4CAF50";
+    }
+    if (normalizedStatus === "paused" || normalizedStatus === "campaign_paused") {
+      return "#FF9800";
+    }
+    if (normalizedStatus === "archived" || normalizedStatus === "deleted" || normalizedStatus === "completed") {
+      return "#9E9E9E";
+    }
+    return "#9E9E9E";
+  };
+
+  const getStatusText = (status) => {
+    const normalizedStatus = (status || "").toLowerCase();
+    if (normalizedStatus === "active" || normalizedStatus === "campaign_active") {
+      return "ACTIVE";
+    }
+    if (normalizedStatus === "paused" || normalizedStatus === "campaign_paused") {
+      return "PAUSED";
+    }
+    if (normalizedStatus === "archived" || normalizedStatus === "deleted") {
+      return "ARCHIVED";
+    }
+    return normalizedStatus.toUpperCase();
+  };
+
+  const handlePauseResume = async (campaignId, currentStatus) => {
+    try {
+      const accessToken = await AsyncStorage.getItem("fb_access_token");
+      const normalizedStatus = (currentStatus || "").toLowerCase();
+      const isPaused = normalizedStatus === "paused" || normalizedStatus === "campaign_paused";
+
+      const endpoint = isPaused
+        ? `${API_BASE_URL}/campaigns/${campaignId}/activate`
+        : `${API_BASE_URL}/campaigns/${campaignId}/pause`;
+
+      await axios.post(
+        endpoint,
+        {},
+        {
+          headers: {
+            "x-fb-access-token": accessToken,
+          },
+        }
+      );
+
+      Alert.alert("Success", `Campaign ${isPaused ? "activated" : "paused"} successfully`);
+      fetchCampaigns();
+    } catch (error) {
+      console.error("Error pausing/resuming campaign:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.fb?.message ||
+          error.response?.data?.message ||
+          "Failed to update campaign status"
+      );
     }
   };
 
-  const renderCampaignItem = ({ item }) => (
-    <View style={styles.campaignCard}>
-      <View style={styles.campaignHeader}>
-        <Text style={styles.campaignName}>{item.name}</Text>
-        <View
-          style={[
-            styles.statusBadge,
-            { backgroundColor: getStatusColor(item.status) },
-          ]}
-        >
-          <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
-        </View>
-      </View>
+  const renderCampaignItem = ({ item }) => {
+    const status = item.effectiveStatus || item.status;
+    const statusColor = getStatusColor(status);
+    const statusText = getStatusText(status);
+    const isPaused = status === "paused" || status === "campaign_paused";
 
-      <View style={styles.campaignDetails}>
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Budget</Text>
-            <Text style={styles.detailValue}>{item.budget}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Spent</Text>
-            <Text style={styles.detailValue}>{item.spent}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>CTR</Text>
-            <Text style={styles.detailValue}>{item.ctr}</Text>
-          </View>
-        </View>
-
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Impressions</Text>
-            <Text style={styles.detailValue}>{item.impressions}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Clicks</Text>
-            <Text style={styles.detailValue}>{item.clicks}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Duration</Text>
-            <Text style={styles.detailValue}>
-              {item.startDate} - {item.endDate}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.campaignActions}>
-        <TouchableOpacity
-          onPress={() => router.push("/AdSetsScreen")}
-          style={styles.actionButton}
-        >
-          <Ionicons name="stats-chart" size={16} color="#4361EE" />
-          <Text style={[styles.actionText, { color: "#4361EE" }]}>
-            View Stats
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="create-outline" size={16} color="#666" />
-          <Text style={[styles.actionText, { color: "#666" }]}>Edit</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionButton}>
-          <MaterialCommunityIcons
-            name={item.status === "paused" ? "play" : "pause"}
-            size={16}
-            color={item.status === "paused" ? "#4CAF50" : "#FF9800"}
-          />
-          <Text
+    return (
+      <View style={styles.campaignCard}>
+        <View style={styles.campaignHeader}>
+          <Text style={styles.campaignName}>{item.name}</Text>
+          <View
             style={[
-              styles.actionText,
-              {
-                color: item.status === "paused" ? "#4CAF50" : "#FF9800",
-              },
+              styles.statusBadge,
+              { backgroundColor: statusColor },
             ]}
           >
-            {item.status === "paused" ? "Resume" : "Pause"}
-          </Text>
-        </TouchableOpacity>
+            <Text style={styles.statusText}>{statusText}</Text>
+          </View>
+        </View>
+
+        <View style={styles.campaignDetails}>
+          <View style={styles.detailRow}>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Objective</Text>
+              <Text style={styles.detailValue}>{item.objective || "N/A"}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Status</Text>
+              <Text style={styles.detailValue}>{statusText}</Text>
+            </View>
+          </View>
+
+          {item.createdTime && (
+            <View style={styles.detailRow}>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Created</Text>
+                <Text style={styles.detailValue}>
+                  {new Date(item.createdTime).toLocaleDateString()}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.campaignActions}>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => router.push({
+              pathname: "/AdSetsScreen",
+              params: { campaignId: item.id, campaignName: item.name }
+            })}
+          >
+            <Ionicons name="layers-outline" size={16} color="#4361EE" />
+            <Text style={[styles.actionText, { color: "#4361EE" }]}>
+              View Ad Sets
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => handlePauseResume(item.id, status)}
+          >
+            <MaterialCommunityIcons
+              name={isPaused ? "play" : "pause"}
+              size={16}
+              color={isPaused ? "#4CAF50" : "#FF9800"}
+            />
+            <Text
+              style={[
+                styles.actionText,
+                {
+                  color: isPaused ? "#4CAF50" : "#FF9800",
+                },
+              ]}
+            >
+              {isPaused ? "Resume" : "Pause"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -274,26 +378,33 @@ export default function MetaCompaigns() {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={filteredCampaigns}
-        renderItem={renderCampaignItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="briefcase-outline" size={64} color="#CCCCCC" />
-            <Text style={styles.emptyStateText}>No campaigns found</Text>
-            <Text style={styles.emptyStateSubtext}>
-              {searchQuery
-                ? "Try a different search term"
-                : "Create your first campaign to get started"}
-            </Text>
-          </View>
-        }
-      />
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1877F2" />
+          <Text style={styles.loadingText}>Loading campaigns...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredCampaigns}
+          renderItem={renderCampaignItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="briefcase-outline" size={64} color="#CCCCCC" />
+              <Text style={styles.emptyStateText}>No campaigns found</Text>
+              <Text style={styles.emptyStateSubtext}>
+                {searchQuery
+                  ? "Try a different search term"
+                  : "Create your first campaign to get started"}
+              </Text>
+            </View>
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -476,5 +587,16 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 8,
     textAlign: "center",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: "#666",
   },
 });

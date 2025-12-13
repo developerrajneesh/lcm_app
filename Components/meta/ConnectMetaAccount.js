@@ -12,11 +12,14 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import AdAccountSelector from "./AdAccountSelector";
 
 export default function MetaConnectScreen({ onSuccess }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [accessToken, setAccessToken] = useState("");
+  const [adAccounts, setAdAccounts] = useState([]);
+  const [showAccountSelector, setShowAccountSelector] = useState(false);
 
   const handleConnectAccount = async () => {
     if (!accessToken.trim()) {
@@ -29,8 +32,9 @@ export default function MetaConnectScreen({ onSuccess }) {
     try {
       // Validate token by fetching ad accounts
       const axios = require("axios");
-      const API_BASE_URL = "https://api.leadscraftmarketing.com/api/v1";
+      const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
       
+      // Fetch ad accounts using the dedicated endpoint
       const response = await axios.get(`${API_BASE_URL}/campaigns`, {
         headers: {
           "x-fb-access-token": accessToken,
@@ -39,12 +43,40 @@ export default function MetaConnectScreen({ onSuccess }) {
 
       if (response.data.success) {
         await AsyncStorage.setItem("fb_access_token", accessToken);
-        setIsConnected(true);
-        Alert.alert(
-          "Success",
-          "Your Meta account has been connected successfully!"
+        
+        // Get ad accounts from response
+        // The endpoint returns { success: true, adAccounts: { data: [...] } }
+        const accounts = response.data.adAccounts?.data || [];
+        const validAccounts = accounts.filter(
+          (account) => account && account.id && typeof account.id === "string" && account.id.trim() !== ""
         );
-        onSuccess(accessToken, response.data.adAccounts?.data?.[0]?.id);
+
+        if (validAccounts.length === 0) {
+          Alert.alert(
+            "No Ad Accounts",
+            "No valid ad accounts found. Please make sure you have ad accounts in your Meta Business Manager."
+          );
+          setIsConnecting(false);
+          return;
+        }
+
+        if (validAccounts.length === 1) {
+          // Only one account - auto-select it
+          const accountId = validAccounts[0].id;
+          await AsyncStorage.setItem("fb_ad_account_id", accountId);
+          setIsConnected(true);
+          Alert.alert(
+            "Success",
+            "Your Meta account has been connected successfully!"
+          );
+          if (onSuccess) {
+            onSuccess();
+          }
+        } else {
+          // Multiple accounts - show selection modal
+          setAdAccounts(validAccounts);
+          setShowAccountSelector(true);
+        }
       } else {
         throw new Error("Invalid access token");
       }
@@ -54,10 +86,29 @@ export default function MetaConnectScreen({ onSuccess }) {
         "Error",
         error.response?.data?.fb?.message ||
           error.response?.data?.message ||
+          error.message ||
           "Failed to connect to Meta. Please check your access token."
       );
     } finally {
       setIsConnecting(false);
+    }
+  };
+
+  const handleAccountSelect = async (accountId) => {
+    try {
+      await AsyncStorage.setItem("fb_ad_account_id", accountId);
+      setShowAccountSelector(false);
+      setIsConnected(true);
+      Alert.alert(
+        "Success",
+        "Your Meta account has been connected successfully!"
+      );
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (error) {
+      console.error("Error saving ad account:", error);
+      Alert.alert("Error", "Failed to save ad account selection");
     }
   };
 
@@ -180,6 +231,15 @@ export default function MetaConnectScreen({ onSuccess }) {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Ad Account Selector Modal */}
+      <AdAccountSelector
+        visible={showAccountSelector}
+        adAccounts={adAccounts}
+        onSelect={handleAccountSelect}
+        onClose={() => setShowAccountSelector(false)}
+        loading={false}
+      />
     </SafeAreaView>
   );
 }

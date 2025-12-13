@@ -1,101 +1,120 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import { useState, useEffect } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   FlatList,
+  Modal,
   RefreshControl,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+
+const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
 
 export default function AdSetsScreen() {
+  const { campaignId, campaignName } = useLocalSearchParams();
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
-  const [budgetType, setBudgetType] = useState("daily"); // 'daily' or 'lifetime'
+  const [loading, setLoading] = useState(true);
+  const [adSets, setAdSets] = useState([]);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [adAccountId, setAdAccountId] = useState(null);
+  
+  // Create Ad Set Form State
+  const [adSetForm, setAdSetForm] = useState({
+    name: "",
+    dailyBudget: "",
+    optimizationGoal: "LINK_CLICKS",
+    billingEvent: "IMPRESSIONS",
+    location: "US",
+    ageMin: "18",
+    ageMax: "65",
+  });
 
-  // Sample ad sets data
-  const [adSets, setAdSets] = useState([
-    {
-      id: "1",
-      name: "Summer Sale - Women 25-40",
-      status: "active",
-      budget: "$50",
-      spent: "$32",
-      impressions: "12.5K",
-      clicks: "850",
-      ctr: "6.8%",
-      result: "245 Purchases",
-      costPerResult: "$0.13",
-      startDate: "Jun 15, 2023",
-      endDate: "Jul 15, 2023",
-      audience: "Women, 25-40, Interest: Fashion",
-      placements: "Facebook Feed, Instagram Stories",
-      optimization: "Conversions",
-    },
-    {
-      id: "2",
-      name: "New Product Launch - Men 30-45",
-      status: "paused",
-      budget: "$75",
-      spent: "$48",
-      impressions: "15.2K",
-      clicks: "920",
-      ctr: "6.1%",
-      result: "180 Leads",
-      costPerResult: "$0.27",
-      startDate: "Jul 1, 2023",
-      endDate: "Aug 1, 2023",
-      audience: "Men, 30-45, Interest: Tech",
-      placements: "Facebook Feed, Audience Network",
-      optimization: "Lead Generation",
-    },
-    {
-      id: "3",
-      name: "Holiday Promotion - Broad Audience",
-      status: "completed",
-      budget: "$100",
-      spent: "$100",
-      impressions: "28.7K",
-      clicks: "1.8K",
-      ctr: "6.3%",
-      result: "420 Website Visits",
-      costPerResult: "$0.24",
-      startDate: "Dec 1, 2022",
-      endDate: "Dec 31, 2022",
-      audience: "All, 18-65",
-      placements: "Facebook Feed, Instagram Feed",
-      optimization: "Link Clicks",
-    },
-    {
-      id: "4",
-      name: "Brand Awareness - Interest Based",
-      status: "active",
-      budget: "$60",
-      spent: "$28",
-      impressions: "18.3K",
-      clicks: "720",
-      ctr: "3.9%",
-      result: "12K Reach",
-      costPerResult: "$0.002",
-      startDate: "Jul 10, 2023",
-      endDate: "Aug 10, 2023",
-      audience: "All, 18+, Interest: Shopping",
-      placements: "Facebook Right Column",
-      optimization: "Reach",
-    },
-  ]);
+  useEffect(() => {
+    if (campaignId) {
+      loadAdAccountId();
+      fetchAdSets();
+    } else {
+      Alert.alert("Error", "Campaign ID not provided");
+      router.back();
+    }
+  }, [campaignId]);
+
+  const loadAdAccountId = async () => {
+    try {
+      const accountId = await AsyncStorage.getItem("fb_ad_account_id");
+      setAdAccountId(accountId);
+    } catch (error) {
+      console.error("Error loading ad account ID:", error);
+    }
+  };
+
+  const fetchAdSets = async () => {
+    try {
+      setLoading(true);
+      const accessToken = await AsyncStorage.getItem("fb_access_token");
+      if (!accessToken) {
+        Alert.alert("Error", "Please connect your Meta account first");
+        router.back();
+        return;
+      }
+
+      const response = await axios.get(`${API_BASE_URL}/adsets/all`, {
+        params: {
+          campaignId: campaignId,
+        },
+        headers: {
+          "x-fb-access-token": accessToken,
+        },
+      });
+
+      if (response.data.success && response.data.adsets?.data) {
+        const formattedAdSets = response.data.adsets.data.map((adSet) => ({
+          id: adSet.id,
+          name: adSet.name || "Unnamed Ad Set",
+          status: adSet.status?.toLowerCase() || "unknown",
+          effectiveStatus: adSet.effective_status?.toLowerCase() || adSet.status?.toLowerCase() || "unknown",
+          dailyBudget: adSet.daily_budget ? `$${(adSet.daily_budget / 100).toFixed(2)}` : "N/A",
+          lifetimeBudget: adSet.lifetime_budget ? `$${(adSet.lifetime_budget / 100).toFixed(2)}` : null,
+          optimizationGoal: adSet.optimization_goal || "N/A",
+          billingEvent: adSet.billing_event || "N/A",
+          createdTime: adSet.created_time,
+          updatedTime: adSet.updated_time,
+        }));
+        setAdSets(formattedAdSets);
+      } else {
+        setAdSets([]);
+      }
+    } catch (error) {
+      console.error("Error fetching ad sets:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.fb?.message ||
+          error.response?.data?.message ||
+          "Failed to fetch ad sets"
+      );
+      setAdSets([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   const onRefresh = () => {
     setRefreshing(true);
-    // Simulate data refresh
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1500);
+    fetchAdSets();
   };
 
   const filteredAdSets = adSets.filter((adSet) => {
@@ -103,219 +122,294 @@ export default function AdSetsScreen() {
       .toLowerCase()
       .includes(searchQuery.toLowerCase());
 
+    const status = adSet.effectiveStatus || adSet.status;
+
     if (activeTab === "all") return matchesSearch;
     if (activeTab === "active")
-      return matchesSearch && adSet.status === "active";
+      return matchesSearch && (status === "active" || status === "adset_active");
     if (activeTab === "paused")
-      return matchesSearch && adSet.status === "paused";
+      return matchesSearch && (status === "paused" || status === "adset_paused");
     if (activeTab === "completed")
-      return matchesSearch && adSet.status === "completed";
+      return matchesSearch && (status === "archived" || status === "deleted");
 
     return matchesSearch;
   });
 
   const getStatusColor = (status) => {
-    switch (status) {
-      case "active":
-        return "#4CAF50";
-      case "paused":
-        return "#FF9800";
-      case "completed":
-        return "#9E9E9E";
-      default:
-        return "#9E9E9E";
+    const normalizedStatus = (status || "").toLowerCase();
+    if (normalizedStatus === "active" || normalizedStatus === "adset_active") {
+      return "#4CAF50";
+    }
+    if (normalizedStatus === "paused" || normalizedStatus === "adset_paused") {
+      return "#FF9800";
+    }
+    if (normalizedStatus === "archived" || normalizedStatus === "deleted") {
+      return "#9E9E9E";
+    }
+    return "#9E9E9E";
+  };
+
+  const getStatusText = (status) => {
+    const normalizedStatus = (status || "").toLowerCase();
+    if (normalizedStatus === "active" || normalizedStatus === "adset_active") {
+      return "ACTIVE";
+    }
+    if (normalizedStatus === "paused" || normalizedStatus === "adset_paused") {
+      return "PAUSED";
+    }
+    if (normalizedStatus === "archived" || normalizedStatus === "deleted") {
+      return "ARCHIVED";
+    }
+    return normalizedStatus.toUpperCase();
+  };
+
+  const handlePauseResume = async (adSetId, currentStatus) => {
+    try {
+      const accessToken = await AsyncStorage.getItem("fb_access_token");
+      const normalizedStatus = (currentStatus || "").toLowerCase();
+      const isPaused = normalizedStatus === "paused" || normalizedStatus === "adset_paused";
+
+      const endpoint = isPaused
+        ? `${API_BASE_URL}/adsets/${adSetId}/activate`
+        : `${API_BASE_URL}/adsets/${adSetId}/pause`;
+
+      await axios.post(
+        endpoint,
+        {},
+        {
+          headers: {
+            "x-fb-access-token": accessToken,
+          },
+        }
+      );
+
+      Alert.alert("Success", `Ad Set ${isPaused ? "activated" : "paused"} successfully`);
+      fetchAdSets();
+    } catch (error) {
+      console.error("Error pausing/resuming ad set:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.fb?.message ||
+          error.response?.data?.message ||
+          "Failed to update ad set status"
+      );
     }
   };
 
-  const toggleAdSetStatus = (id) => {
-    setAdSets(
-      adSets.map((adSet) => {
-        if (adSet.id === id) {
-          const newStatus = adSet.status === "active" ? "paused" : "active";
-          return { ...adSet, status: newStatus };
+  const handleCreateAdSet = async () => {
+    if (!adSetForm.name.trim()) {
+      Alert.alert("Error", "Please enter an ad set name");
+      return;
+    }
+    if (!adSetForm.dailyBudget || parseFloat(adSetForm.dailyBudget) < 225) {
+      Alert.alert("Error", "Daily budget must be at least ₹225.00");
+      return;
+    }
+    if (!adAccountId) {
+      Alert.alert("Error", "Ad account ID not found. Please reconnect your Meta account.");
+      return;
+    }
+
+    setCreating(true);
+
+    try {
+      const accessToken = await AsyncStorage.getItem("fb_access_token");
+      
+      // Convert budget to paise (×100) - Meta uses paise for INR
+      const dailyBudgetPaise = Math.round(parseFloat(adSetForm.dailyBudget) * 100);
+
+      const targetingData = {
+        geo_locations: {
+          countries: [adSetForm.location],
+        },
+        age_min: parseInt(adSetForm.ageMin) || 18,
+        age_max: parseInt(adSetForm.ageMax) || 65,
+        interests: [],
+      };
+
+      const response = await axios.post(
+        `${API_BASE_URL}/adsets`,
+        {
+          campaignId: campaignId,
+          adAccountId: adAccountId,
+          name: adSetForm.name.trim(),
+          optimizationGoal: adSetForm.optimizationGoal,
+          billingEvent: adSetForm.billingEvent,
+          dailyBudget: dailyBudgetPaise,
+          targeting: targetingData,
+          status: "PAUSED",
+          autoFixBudget: false,
+        },
+        {
+          headers: {
+            "x-fb-access-token": accessToken,
+          },
         }
-        return adSet;
-      })
-    );
+      );
+
+      if (response.data.success) {
+        Alert.alert("Success", "Ad Set created successfully!");
+        setShowCreateModal(false);
+        setAdSetForm({
+          name: "",
+          dailyBudget: "",
+          optimizationGoal: "LINK_CLICKS",
+          billingEvent: "IMPRESSIONS",
+          location: "US",
+          ageMin: "18",
+          ageMax: "65",
+        });
+        fetchAdSets();
+      } else {
+        throw new Error(response.data.message || "Failed to create ad set");
+      }
+    } catch (error) {
+      console.error("Error creating ad set:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.fb?.message ||
+          error.response?.data?.message ||
+          error.message ||
+          "Failed to create ad set. Please try again."
+      );
+    } finally {
+      setCreating(false);
+    }
   };
 
-  const renderAdSetItem = ({ item }) => (
-    <View style={styles.adSetCard}>
-      <View style={styles.adSetHeader}>
-        <Text style={styles.adSetName}>{item.name}</Text>
-        <View
-          style={[
-            styles.statusBadge,
-            { backgroundColor: getStatusColor(item.status) },
-          ]}
-        >
-          <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
-        </View>
-      </View>
+  const renderAdSetItem = ({ item }) => {
+    const status = item.effectiveStatus || item.status;
+    const statusColor = getStatusColor(status);
+    const statusText = getStatusText(status);
+    const isPaused = status === "paused" || status === "adset_paused";
+    const budget = item.lifetimeBudget || item.dailyBudget;
 
-      <View style={styles.adSetDetails}>
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Budget</Text>
-            <Text style={styles.detailValue}>{item.budget}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Spent</Text>
-            <Text style={styles.detailValue}>{item.spent}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>CTR</Text>
-            <Text style={styles.detailValue}>{item.ctr}</Text>
-          </View>
-        </View>
-
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Impressions</Text>
-            <Text style={styles.detailValue}>{item.impressions}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Clicks</Text>
-            <Text style={styles.detailValue}>{item.clicks}</Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Results</Text>
-            <Text style={styles.detailValue}>{item.result}</Text>
-          </View>
-        </View>
-
-        <View style={styles.additionalInfo}>
-          <View style={styles.infoRow}>
-            <Ionicons name="people" size={16} color="#666" />
-            <Text style={styles.infoText}>{item.audience}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <MaterialCommunityIcons name="cellphone" size={16} color="#666" />
-            <Text style={styles.infoText}>{item.placements}</Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Ionicons name="trending-up" size={16} color="#666" />
-            <Text style={styles.infoText}>
-              Optimization: {item.optimization}
-            </Text>
-          </View>
-          <View style={styles.infoRow}>
-            <Ionicons name="calendar" size={16} color="#666" />
-            <Text style={styles.infoText}>
-              {item.startDate} - {item.endDate}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.adSetActions}>
-        <TouchableOpacity
-          onPress={() => router.push("/AdsScreen")}
-          style={styles.actionButton}
-        >
-          <Ionicons name="stats-chart" size={16} color="#4361EE" />
-          <Text style={[styles.actionText, { color: "#4361EE" }]}>
-            Performance
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionButton}>
-          <Ionicons name="create-outline" size={16} color="#666" />
-          <Text style={[styles.actionText, { color: "#666" }]}>Edit</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.actionButton}
-          onPress={() => toggleAdSetStatus(item.id)}
-        >
-          <MaterialCommunityIcons
-            name={item.status === "paused" ? "play" : "pause"}
-            size={16}
-            color={item.status === "paused" ? "#4CAF50" : "#FF9800"}
-          />
-          <Text
+    return (
+      <View style={styles.adSetCard}>
+        <View style={styles.adSetHeader}>
+          <Text style={styles.adSetName}>{item.name}</Text>
+          <View
             style={[
-              styles.actionText,
-              {
-                color: item.status === "paused" ? "#4CAF50" : "#FF9800",
-              },
+              styles.statusBadge,
+              { backgroundColor: statusColor },
             ]}
           >
-            {item.status === "paused" ? "Enable" : "Pause"}
-          </Text>
-        </TouchableOpacity>
+            <Text style={styles.statusText}>{statusText}</Text>
+          </View>
+        </View>
+
+        <View style={styles.adSetDetails}>
+          <View style={styles.detailRow}>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Budget</Text>
+              <Text style={styles.detailValue}>{budget}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Status</Text>
+              <Text style={styles.detailValue}>{statusText}</Text>
+            </View>
+            <View style={styles.detailItem}>
+              <Text style={styles.detailLabel}>Optimization</Text>
+              <Text style={styles.detailValue}>{item.optimizationGoal}</Text>
+            </View>
+          </View>
+
+          {item.createdTime && (
+            <View style={styles.detailRow}>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Created</Text>
+                <Text style={styles.detailValue}>
+                  {new Date(item.createdTime).toLocaleDateString()}
+                </Text>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.adSetActions}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.viewAdsButton]}
+            onPress={() => {
+              router.push({
+                pathname: "/AdsScreen",
+                params: {
+                  adsetId: item.id,
+                  adsetName: item.name,
+                  campaignId: campaignId,
+                  campaignName: campaignName || "Campaign",
+                },
+              });
+            }}
+          >
+            <Ionicons name="eye-outline" size={16} color="#1877F2" />
+            <Text style={[styles.actionText, { color: "#1877F2" }]}>
+              View Ads
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => handlePauseResume(item.id, status)}
+          >
+            <MaterialCommunityIcons
+              name={isPaused ? "play" : "pause"}
+              size={16}
+              color={isPaused ? "#4CAF50" : "#FF9800"}
+            />
+            <Text
+              style={[
+                styles.actionText,
+                {
+                  color: isPaused ? "#4CAF50" : "#FF9800",
+                },
+              ]}
+            >
+              {isPaused ? "Resume" : "Pause"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Ad Sets Management</Text>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color="#1e293b" />
+        </TouchableOpacity>
+        <View style={styles.headerContent}>
+          <Text style={styles.headerTitle}>
+            {campaignName ? `Ad Sets - ${campaignName}` : "Ad Sets"}
+          </Text>
           <Text style={styles.headerSubtitle}>
-            Manage your Meta advertising sets
+            Campaign ID: {campaignId}
           </Text>
         </View>
-        <TouchableOpacity style={styles.createButton}>
-          <Ionicons name="add" size={24} color="white" />
-          <Text style={styles.createButtonText}>Create Ad Set</Text>
+        <TouchableOpacity
+          style={styles.createButton}
+          onPress={() => setShowCreateModal(true)}
+        >
+          <Ionicons name="add" size={20} color="white" />
+          <Text style={styles.createButtonText}>Create</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.controlsContainer}>
-        <View style={styles.searchContainer}>
-          <Ionicons
-            name="search"
-            size={20}
-            color="#666"
-            style={styles.searchIcon}
-          />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search ad sets..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-        </View>
-
-        <View style={styles.budgetToggle}>
-          <Text style={styles.toggleLabel}>Budget Type:</Text>
-          <View style={styles.toggleContainer}>
-            <TouchableOpacity
-              style={[
-                styles.toggleOption,
-                budgetType === "daily" && styles.activeToggle,
-              ]}
-              onPress={() => setBudgetType("daily")}
-            >
-              <Text
-                style={[
-                  styles.toggleText,
-                  budgetType === "daily" && styles.activeToggleText,
-                ]}
-              >
-                Daily
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.toggleOption,
-                budgetType === "lifetime" && styles.activeToggle,
-              ]}
-              onPress={() => setBudgetType("lifetime")}
-            >
-              <Text
-                style={[
-                  styles.toggleText,
-                  budgetType === "lifetime" && styles.activeToggleText,
-                ]}
-              >
-                Lifetime
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+      <View style={styles.searchContainer}>
+        <Ionicons
+          name="search"
+          size={20}
+          color="#666"
+          style={styles.searchIcon}
+        />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search ad sets..."
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
       </View>
 
       <View style={styles.tabContainer}>
@@ -373,45 +467,169 @@ export default function AdSetsScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.statsOverview}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>4</Text>
-          <Text style={styles.statLabel}>Total Ad Sets</Text>
+      {loading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#1877F2" />
+          <Text style={styles.loadingText}>Loading ad sets...</Text>
         </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>2</Text>
-          <Text style={styles.statLabel}>Active</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>$208</Text>
-          <Text style={styles.statLabel}>Total Spent</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>6.3%</Text>
-          <Text style={styles.statLabel}>Avg. CTR</Text>
-        </View>
-      </View>
-
-      <FlatList
-        data={filteredAdSets}
-        renderItem={renderAdSetItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="layers-outline" size={64} color="#CCCCCC" />
-            <Text style={styles.emptyStateText}>No ad sets found</Text>
-            <Text style={styles.emptyStateSubtext}>
-              {searchQuery
-                ? "Try a different search term"
-                : "Create your first ad set to get started"}
-            </Text>
+      ) : (
+        <>
+          <View style={styles.statsOverview}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{adSets.length}</Text>
+              <Text style={styles.statLabel}>Total Ad Sets</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                {adSets.filter((a) => (a.effectiveStatus || a.status) === "active" || (a.effectiveStatus || a.status) === "adset_active").length}
+              </Text>
+              <Text style={styles.statLabel}>Active</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                {adSets.filter((a) => (a.effectiveStatus || a.status) === "paused" || (a.effectiveStatus || a.status) === "adset_paused").length}
+              </Text>
+              <Text style={styles.statLabel}>Paused</Text>
+            </View>
           </View>
-        }
-      />
+
+          <FlatList
+            data={filteredAdSets}
+            renderItem={renderAdSetItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.listContent}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Ionicons name="layers-outline" size={64} color="#CCCCCC" />
+                <Text style={styles.emptyStateText}>No ad sets found</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  {searchQuery
+                    ? "Try a different search term"
+                    : "This campaign has no ad sets yet"}
+                </Text>
+              </View>
+            }
+          />
+        </>
+      )}
+
+      {/* Create Ad Set Modal */}
+      <Modal
+        visible={showCreateModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Create Ad Set</Text>
+              <TouchableOpacity
+                onPress={() => setShowCreateModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color="#1e293b" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Ad Set Name *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="e.g., Summer Sale - AdSet"
+                  value={adSetForm.name}
+                  onChangeText={(text) =>
+                    setAdSetForm({ ...adSetForm, name: text })
+                  }
+                />
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Daily Budget (₹) *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="Minimum: 225"
+                  value={adSetForm.dailyBudget}
+                  onChangeText={(text) =>
+                    setAdSetForm({ ...adSetForm, dailyBudget: text })
+                  }
+                  keyboardType="numeric"
+                />
+                <Text style={styles.formHint}>Minimum: ₹225.00 per day</Text>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Optimization Goal</Text>
+                <View style={styles.selectContainer}>
+                  <Text style={styles.selectText}>{adSetForm.optimizationGoal}</Text>
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Billing Event</Text>
+                <View style={styles.selectContainer}>
+                  <Text style={styles.selectText}>{adSetForm.billingEvent}</Text>
+                </View>
+              </View>
+
+              <View style={styles.formGroup}>
+                <Text style={styles.formLabel}>Location</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="e.g., US, IN"
+                  value={adSetForm.location}
+                  onChangeText={(text) =>
+                    setAdSetForm({ ...adSetForm, location: text.toUpperCase() })
+                  }
+                />
+              </View>
+
+              <View style={styles.formRow}>
+                <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+                  <Text style={styles.formLabel}>Min Age</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="18"
+                    value={adSetForm.ageMin}
+                    onChangeText={(text) =>
+                      setAdSetForm({ ...adSetForm, ageMin: text })
+                    }
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+                  <Text style={styles.formLabel}>Max Age</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    placeholder="65"
+                    value={adSetForm.ageMax}
+                    onChangeText={(text) =>
+                      setAdSetForm({ ...adSetForm, ageMax: text })
+                    }
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.submitButton, creating && styles.submitButtonDisabled]}
+                onPress={handleCreateAdSet}
+                disabled={creating}
+              >
+                {creating ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Create Ad Set</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -423,22 +641,31 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     padding: 16,
     backgroundColor: "white",
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
   },
+  backButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  headerContent: {
+    flex: 1,
+  },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#1a1a1a",
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: 12,
     color: "#666",
     marginTop: 2,
+  },
+  placeholder: {
+    width: 40,
   },
   createButton: {
     flexDirection: "row",
@@ -453,20 +680,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: 6,
   },
-  controlsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: "white",
-  },
   searchContainer: {
-    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f0f2f5",
     borderRadius: 8,
     paddingHorizontal: 12,
-    marginRight: 12,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    height: 45,
   },
   searchIcon: {
     marginRight: 8,
@@ -655,10 +877,18 @@ const styles = StyleSheet.create({
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: "#f0f2f5",
+  },
+  viewAdsButton: {
+    backgroundColor: "#e3f2fd",
   },
   actionText: {
     marginLeft: 6,
     fontSize: 14,
+    fontWeight: "500",
   },
   emptyState: {
     alignItems: "center",
@@ -676,5 +906,114 @@ const styles = StyleSheet.create({
     color: "#999",
     marginTop: 8,
     textAlign: "center",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: "#666",
+  },
+  createButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1877F2",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  createButtonText: {
+    color: "white",
+    fontWeight: "600",
+    marginLeft: 4,
+    fontSize: 14,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "flex-end",
+  },
+  modalContainer: {
+    backgroundColor: "#ffffff",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "90%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalContent: {
+    padding: 20,
+  },
+  formGroup: {
+    marginBottom: 20,
+  },
+  formLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#334155",
+    marginBottom: 8,
+  },
+  formInput: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    color: "#1e293b",
+  },
+  formHint: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 4,
+  },
+  formRow: {
+    flexDirection: "row",
+    marginBottom: 20,
+  },
+  selectContainer: {
+    backgroundColor: "#f8fafc",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    borderRadius: 12,
+    padding: 14,
+  },
+  selectText: {
+    fontSize: 16,
+    color: "#1e293b",
+  },
+  submitButton: {
+    backgroundColor: "#1877F2",
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  submitButtonDisabled: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

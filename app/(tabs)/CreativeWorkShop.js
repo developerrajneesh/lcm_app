@@ -12,7 +12,7 @@ import {
   Platform,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
 import { StatusBar } from "expo-status-bar";
 import axios from "axios";
@@ -145,7 +145,7 @@ export default function WorkshopScreen() {
 
           // Write base64 to file
           await FileSystem.writeAsStringAsync(fileUri, base64Data, {
-            encoding: FileSystem.EncodingType.Base64,
+            encoding: "base64",
           });
         }
 

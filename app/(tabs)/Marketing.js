@@ -7,6 +7,7 @@ import {
 import { router } from "expo-router";
 import { useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   SafeAreaView,
@@ -34,17 +35,19 @@ const MarketingOptionsScreen = () => {
       color: "#1877F2",
       gradient: ["#1877F2", "#0A5BC4"],
       stats: { engagement: "92%", roi: "3.5x", time: "24h" },
+      route: "/MetaWorker",
     },
-    // {
-    //   id: 2,
-    //   title: "WhatsApp Marketing",
-    //   description:
-    //     "Engage customers directly with personalized messages and updates",
-    //   icon: <FontAwesome5 name="whatsapp" size={24} color="#25D366" />,
-    //   color: "#25D366",
-    //   gradient: ["#25D366", "#128C7E"],
-    //   stats: { engagement: "98%", roi: "4.2x", time: "2h" },
-    // },
+    {
+      id: 2,
+      title: "IVR",
+      description:
+        "Interactive Voice Response system for automated customer engagement",
+      icon: <Ionicons name="call-outline" size={24} color="#10B981" />,
+      color: "#10B981",
+      gradient: ["#10B981", "#059669"],
+      stats: { engagement: "90%", roi: "3.0x", time: "48h" },
+      route: "/IvrForm",
+    },
     {
       id: 3,
       title: "Email Marketing",
@@ -54,6 +57,8 @@ const MarketingOptionsScreen = () => {
       color: "#EA4335",
       gradient: ["#EA4335", "#D14836"],
       stats: { engagement: "85%", roi: "2.8x", time: "12h" },
+      route: null,
+      comingSoon: true,
     },
     {
       id: 4,
@@ -63,26 +68,26 @@ const MarketingOptionsScreen = () => {
       color: "#8E44AD",
       gradient: ["#8E44AD", "#6C3483"],
       stats: { engagement: "95%", roi: "3.2x", time: "1h" },
+      route: null,
+      comingSoon: true,
     },
-    // {
-    //   id: 5,
-    //   title: "Instagram Ads",
-    //   description: "Leverage visual storytelling to connect with your audience",
-    //   icon: <FontAwesome5 name="instagram" size={24} color="#E1306C" />,
-    //   color: "#E1306C",
-    //   gradient: ["#E1306C", "#C13584"],
-    //   stats: { engagement: "89%", roi: "3.8x", time: "18h" },
-    // },
   ];
 
   const handleOptionPress = (option) => {
-    setSelectedOption(option);
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-    router.push("/MetaWorker");
+    if (option.comingSoon) {
+      Alert.alert("Coming Soon", `${option.title} is currently under development. We're working hard to bring you this amazing feature soon!`);
+      return;
+    }
+    if (option.route) {
+      router.push(option.route);
+    } else {
+      setSelectedOption(option);
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
   };
 
   const handleCloseDetail = () => {
@@ -113,7 +118,11 @@ const MarketingOptionsScreen = () => {
       </View>
       <Text style={styles.cardDescription}>{option.description}</Text>
       <View style={styles.cardFooter}>
-        <Text style={[styles.learnMore, { color: option.color }]}></Text>
+        {option.comingSoon && (
+          <View style={styles.comingSoonBadge}>
+            <Text style={styles.comingSoonText}>Coming Soon</Text>
+          </View>
+        )}
         <Ionicons name="chevron-forward" size={20} color={option.color} />
       </View>
     </TouchableOpacity>
@@ -404,6 +413,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#4299E1",
     fontWeight: "600",
+  },
+  comingSoonBadge: {
+    backgroundColor: "#fef3c7",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  comingSoonText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#d97706",
   },
 });
 

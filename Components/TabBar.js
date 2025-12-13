@@ -8,7 +8,7 @@ const TabBar = () => {
 
   const tabs = [
     { name: "Settings", icon: "settings-outline" },
-    { name: "Referrals", icon: "gift-outline" },
+    { name: "Subscription", icon: "card-outline" },
     { name: "Home", icon: "home" },
     { name: "Creatives", icon: "image-outline" },
     { name: "Marketing", icon: "megaphone-outline" },
@@ -27,9 +27,9 @@ const TabBar = () => {
               //   console.log(`${tab.name} pressed`);
               router.push("/Settings");
             }
-            if (tab.name == "Referrals") {
+            if (tab.name == "Subscription") {
               //   console.log(`${tab.name} pressed`);
-              router.push("/Referrals");
+              router.push("/Subscription");
             }
           }}
           style={styles.tabItem}

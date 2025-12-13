@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Dimensions,
+  SectionList,
 } from "react-native";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -21,12 +22,40 @@ const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
 
 const MyCreatives = () => {
   const [workshops, setWorkshops] = useState([]);
+  const [groupedSections, setGroupedSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchWorkshops();
   }, []);
+
+  useEffect(() => {
+    // Group workshops by category
+    const grouped = {};
+    workshops.forEach((workshop) => {
+      const categoryName = workshop.category?.name || "Uncategorized";
+      if (!grouped[categoryName]) {
+        grouped[categoryName] = [];
+      }
+      grouped[categoryName].push(workshop);
+    });
+
+    // Convert to SectionList format
+    const sections = Object.keys(grouped).map((categoryName) => ({
+      title: categoryName,
+      data: grouped[categoryName],
+    }));
+
+    // Sort sections alphabetically (Uncategorized at the end)
+    sections.sort((a, b) => {
+      if (a.title === "Uncategorized") return 1;
+      if (b.title === "Uncategorized") return -1;
+      return a.title.localeCompare(b.title);
+    });
+
+    setGroupedSections(sections);
+  }, [workshops]);
 
   const fetchWorkshops = async () => {
     try {
@@ -75,12 +104,12 @@ const MyCreatives = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      {/* <View style={styles.header}>
         <Text style={styles.title}>📱 Workshop Gallery</Text>
         <Text style={styles.subtitle}>
           {workshops.length} {workshops.length === 1 ? "workshop" : "workshops"} available
         </Text>
-      </View>
+      </View> */}
 
       {workshops.length === 0 ? (
         <View style={styles.emptyState}>
@@ -90,45 +119,69 @@ const MyCreatives = () => {
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={workshops}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.card}
-              onPress={() => handleWorkshopPress(item.id)}
-              activeOpacity={0.7}
-            >
-              {item.thumbnail ? (
-                <Image
-                  source={{ uri: item.thumbnail }}
-                  style={styles.cardImage}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.cardImagePlaceholder}>
-                  <Text style={styles.placeholderText}>No Image</Text>
-                </View>
-              )}
-              <View style={styles.cardContent}>
-                <Text style={styles.cardTitle} numberOfLines={1}>
-                  Workshop
-                </Text>
-                <Text style={styles.cardSubtitle}>
-                  {item.imageCount} {item.imageCount === 1 ? "image" : "images"}
-                </Text>
-                <Text style={styles.cardDate}>
-                  {formatDate(item.createdAt)}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
+        <ScrollView
           contentContainerStyle={styles.contentContainer}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
-        />
+        >
+          {groupedSections.map((section) => (
+            <View key={section.title} style={styles.sectionContainer}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>{section.title}</Text>
+                <View style={styles.sectionCountBadge}>
+                  <Text style={styles.sectionCountText}>
+                    {section.data.length} {section.data.length === 1 ? "workshop" : "workshops"}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.sectionGrid}>
+                {section.data.map((item, index) => {
+                  const isLeft = index % 2 === 0;
+                  return (
+                    <View
+                      key={item.id}
+                      style={[
+                        styles.cardWrapper,
+                        isLeft && styles.cardWrapperLeft,
+                        !isLeft && styles.cardWrapperRight,
+                      ]}
+                    >
+                      <TouchableOpacity
+                        style={styles.card}
+                        onPress={() => handleWorkshopPress(item.id)}
+                        activeOpacity={0.7}
+                      >
+                        {item.thumbnail ? (
+                          <Image
+                            source={{ uri: item.thumbnail }}
+                            style={styles.cardImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View style={styles.cardImagePlaceholder}>
+                            <Text style={styles.placeholderText}>No Image</Text>
+                          </View>
+                        )}
+                        <View style={styles.cardContent}>
+                          <Text style={styles.cardTitle} numberOfLines={1}>
+                            Workshop
+                          </Text>
+                          <Text style={styles.cardSubtitle}>
+                            {item.imageCount} {item.imageCount === 1 ? "image" : "images"}
+                          </Text>
+                          <Text style={styles.cardDate}>
+                            {formatDate(item.createdAt)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+        </ScrollView>
       )}
     </View>
   );
@@ -168,13 +221,30 @@ const styles = StyleSheet.create({
     color: "#666",
   },
   contentContainer: {
-    padding: 15,
+    paddingBottom: 15,
+  },
+  sectionContainer: {
+    marginBottom: 20,
+  },
+  sectionGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 15,
+  },
+  cardWrapper: {
+    width: "50%",
+    marginBottom: 15,
+  },
+  cardWrapperLeft: {
+    paddingRight: 7.5,
+  },
+  cardWrapperRight: {
+    paddingLeft: 7.5,
   },
   card: {
-    width: CARD_WIDTH,
+    width: "100%",
     backgroundColor: "#fff",
     borderRadius: 12,
-    marginBottom: 15,
     overflow: "hidden",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -232,6 +302,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#999",
     textAlign: "center",
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    marginTop: 20,
+    marginBottom: 10,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    marginHorizontal: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: "#667eea",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1f2937",
+  },
+  sectionCountBadge: {
+    backgroundColor: "#f3f4f6",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  sectionCountText: {
+    fontSize: 12,
+    color: "#6b7280",
+    fontWeight: "500",
+  },
+  sectionFooter: {
+    height: 10,
   },
 });
 

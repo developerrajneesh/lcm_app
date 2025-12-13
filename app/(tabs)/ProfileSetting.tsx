@@ -1,6 +1,6 @@
 import { Entypo, Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   Image,
@@ -11,17 +11,161 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
+
+const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
 
 const ProfileSetting = () => {
-  const [name, setName] = useState("Emily Smith");
-  const [email, setEmail] = useState("emily.smith@example.com");
-  const [phone, setPhone] = useState("+1 234 567 8900");
-  const [bio, setBio] = useState("Digital Marketing Enthusiast");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [bio, setBio] = useState("");
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [user, setUser] = useState<any>(null);
 
-  const handleSave = () => {
-    Alert.alert("Success", "Profile updated successfully!");
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  const loadUserData = async () => {
+    try {
+      setLoading(true);
+      const userData = await AsyncStorage.getItem("user");
+      if (userData) {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        setName(parsedUser.name || "");
+        setEmail(parsedUser.email || "");
+        setPhone(parsedUser.phoneNumber || "");
+        setProfileImage(parsedUser.profileImage || null);
+        setPreviewImage(parsedUser.profileImage || null);
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
+      Alert.alert("Error", "Failed to load user data");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const handleImagePick = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Please grant camera roll permissions to upload an image."
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        const asset = result.assets[0];
+        setPreviewImage(asset.uri);
+        // Convert to base64
+        try {
+          const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: "base64",
+          } as any);
+          const mimeType = asset.type || "image/jpeg";
+          const base64Data = `data:${mimeType};base64,${base64}`;
+          setProfileImage(base64Data);
+        } catch (error) {
+          console.error("Error converting image:", error);
+          Alert.alert("Error", "Failed to process image");
+        }
+      }
+    } catch (error) {
+      console.error("Image picker error:", error);
+      Alert.alert("Error", "Failed to pick image");
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user || !user.id) {
+      Alert.alert("Error", "User not found. Please login again.");
+      return;
+    }
+
+    // Validation
+    if (!name.trim()) {
+      Alert.alert("Validation Error", "Name is required");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      Alert.alert("Validation Error", "Please enter a valid email address");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const response = await axios.put(
+        `${API_BASE_URL}/user/${user.id}/profile`,
+        {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          phoneNumber: phone.trim() || undefined,
+          profileImage: profileImage || undefined,
+        }
+      );
+
+      if (response.data.success || response.data.message) {
+        // Update AsyncStorage with new user data
+        const updatedUser = {
+          ...user,
+          name: response.data.user.name,
+          email: response.data.user.email,
+          phoneNumber: response.data.user.phoneNumber,
+          profileImage: response.data.user.profileImage,
+        };
+        await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        setPreviewImage(response.data.user.profileImage || null);
+
+        Alert.alert("Success", "Profile updated successfully!");
+      } else {
+        Alert.alert("Error", response.data.message || "Failed to update profile");
+      }
+    } catch (error: any) {
+      console.error("Update error:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to update profile. Please try again."
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6366f1" />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -32,25 +176,39 @@ const ProfileSetting = () => {
             <Ionicons name="arrow-back" size={24} color="#1e293b" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Profile Setting</Text>
-          <TouchableOpacity onPress={handleSave} style={styles.saveButton}>
-            <Text style={styles.saveButtonText}>Save</Text>
+          <TouchableOpacity
+            onPress={handleSave}
+            style={styles.saveButton}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#6366f1" />
+            ) : (
+              <Text style={styles.saveButtonText}>Save</Text>
+            )}
           </TouchableOpacity>
         </View>
 
         {/* Profile Image Section */}
         <View style={styles.profileImageSection}>
           <View style={styles.profileImageContainer}>
-            <Image
-              source={{
-                uri: "https://randomuser.me/api/portraits/women/44.jpg",
-              }}
-              style={styles.profileImage}
-            />
-            <TouchableOpacity style={styles.editImageButton}>
+            {previewImage ? (
+              <Image source={{ uri: previewImage }} style={styles.profileImage} />
+            ) : (
+              <View style={styles.profileImagePlaceholder}>
+                <Ionicons name="person" size={50} color="#94a3b8" />
+              </View>
+            )}
+            <TouchableOpacity
+              style={styles.editImageButton}
+              onPress={handleImagePick}
+            >
               <Ionicons name="camera" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
-          <Text style={styles.changePhotoText}>Change Photo</Text>
+          <TouchableOpacity onPress={handleImagePick}>
+            <Text style={styles.changePhotoText}>Change Photo</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Form Section */}
@@ -116,8 +274,16 @@ const ProfileSetting = () => {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.saveButtonLarge} onPress={handleSave}>
-            <Text style={styles.saveButtonLargeText}>Save Changes</Text>
+          <TouchableOpacity
+            style={[styles.saveButtonLarge, saving && styles.saveButtonLargeDisabled]}
+            onPress={handleSave}
+            disabled={saving}
+          >
+            {saving ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.saveButtonLargeText}>Save Changes</Text>
+            )}
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -243,6 +409,24 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
+  },
+  saveButtonLargeDisabled: {
+    opacity: 0.6,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  profileImagePlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 4,
+    borderColor: "#e2e8f0",
+    backgroundColor: "#f1f5f9",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 

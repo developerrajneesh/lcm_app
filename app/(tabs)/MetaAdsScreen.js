@@ -27,7 +27,7 @@ import {
 // import * as ImagePicker from "expo-image-picker";
 import MetaConnectScreen from "../../Components/meta/ConnectMetaAccount";
 
-const API_BASE_URL = "https://api.leadscraftmarketing.com/api/v1";
+const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
 
 // Header Component
 const Header = () => (
@@ -498,7 +498,7 @@ const MetaAdsScreen = () => {
           name: campaignName,
           objective: objective,
           status: "PAUSED",
-          special_ad_categories: ["NONE"],
+          special_ad_categories: [], // Empty array for regular campaigns
         },
         {
           headers: {
