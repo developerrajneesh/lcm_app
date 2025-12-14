@@ -29,6 +29,7 @@ const SignUpScreen = () => {
     password: "",
     phoneNumber: "",
     profileImage: null,
+    referralCode: "",
   });
   const [previewImage, setPreviewImage] = useState(null);
   const [signupLoading, setSignupLoading] = useState(false);
@@ -293,6 +294,35 @@ const SignUpScreen = () => {
                 />
               </View>
 
+              {/* Referral Code */}
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>
+                  Referral Code <Text style={styles.optional}>(Optional)</Text>
+                </Text>
+                <View style={styles.inputWrapper}>
+                  <Ionicons
+                    name="gift-outline"
+                    size={20}
+                    color="#6366f1"
+                    style={styles.inputIcon}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Enter referral code if you have one"
+                    placeholderTextColor="#94a3b8"
+                    value={signupData.referralCode}
+                    onChangeText={(text) => {
+                      setSignupData({ ...signupData, referralCode: text.toUpperCase() });
+                      setSignupError("");
+                    }}
+                    autoCapitalize="characters"
+                  />
+                </View>
+                <Text style={styles.hintText}>
+                  Enter a referral code to help someone earn ₹50
+                </Text>
+              </View>
+
               <TouchableOpacity
                 style={[
                   styles.submitButton,
@@ -454,14 +484,33 @@ const styles = StyleSheet.create({
     color: "#334155",
     marginBottom: 8,
   },
-  input: {
+  inputWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "#e2e8f0",
     borderRadius: 12,
+    paddingHorizontal: 12,
+  },
+  inputIcon: {
+    marginRight: 8,
+  },
+  input: {
+    flex: 1,
     padding: 16,
     fontSize: 16,
     color: "#1e293b",
+  },
+  hintText: {
+    fontSize: 12,
+    color: "#64748b",
+    marginTop: 4,
+  },
+  optional: {
+    fontSize: 12,
+    color: "#94a3b8",
+    fontWeight: "400",
   },
   submitButton: {
     backgroundColor: "#6366f1",

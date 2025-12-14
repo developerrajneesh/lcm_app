@@ -88,6 +88,13 @@ const LiveChat = () => {
     newSocket.on("receive_message", (data: any) => {
       if (data.success && data.data) {
         const message = data.data;
+        
+        // Ignore messages from the current user (they should be handled by message_sent)
+        const senderId = message.sender?._id || message.sender;
+        if (String(senderId) === String(user.id)) {
+          return;
+        }
+        
         setMessages((prev) => {
           // Check if message already exists to avoid duplicates
           const exists = prev.some((m) => {
@@ -114,42 +121,40 @@ const LiveChat = () => {
     newSocket.on("message_sent", (data: any) => {
       if (data.success && data.data) {
         const message = data.data;
+        
+        // Only process messages sent by the current user
+        const senderId = message.sender?._id || message.sender;
+        if (String(senderId) !== String(user.id)) {
+          return;
+        }
+        
         setMessages((prev) => {
-          // Remove any temporary messages with the same content
+          // Remove any temporary messages with the same content from the current user
           const filtered = prev.filter((m) => {
-            if (m._id && !m._id.startsWith("temp_")) {
+            const mSenderId = m.sender?._id || m.sender;
+            const isOwnTemp = m._id?.startsWith("temp_") && String(mSenderId) === String(user.id);
+            
+            // Remove temp messages that match this confirmed message
+            if (isOwnTemp) {
               return !(
-                String(m._id) === String(message._id) ||
-                (m.message === message.message &&
-                  m.sender?._id === message.sender?._id &&
-                  Math.abs(
-                    new Date(m.createdAt).getTime() -
-                      new Date(message.createdAt).getTime()
-                  ) < 5000)
+                m.message === message.message &&
+                Math.abs(
+                  new Date(m.createdAt).getTime() -
+                    new Date(message.createdAt).getTime()
+                ) < 5000
               );
             }
-            return !(
-              m._id?.startsWith("temp_") &&
-              m.message === message.message &&
-              (m.sender?._id === message.sender?._id ||
-                m.sender === message.sender?._id)
-            );
+            
+            // Keep all non-temp messages and temp messages from others
+            return true;
           });
 
-          // Check if message already exists
+          // Check if this confirmed message already exists
           const exists = filtered.some((m) => {
             if (m._id && message._id) {
               return String(m._id) === String(message._id);
             }
-            return (
-              m.message === message.message &&
-              (m.sender?._id === message.sender?._id ||
-                m.sender === message.sender?._id) &&
-              Math.abs(
-                new Date(m.createdAt).getTime() -
-                  new Date(message.createdAt).getTime()
-              ) < 5000
-            );
+            return false;
           });
 
           if (exists) return filtered;
@@ -157,6 +162,7 @@ const LiveChat = () => {
           // Remove from pending messages
           pendingMessagesRef.current.delete(message.message);
 
+          // Add the confirmed message
           return [...filtered, message];
         });
         setTimeout(scrollToBottom, 100);

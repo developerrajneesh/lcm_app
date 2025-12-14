@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Alert,
   SafeAreaView,
@@ -10,57 +10,123 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  RefreshControl,
+  Image,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import * as Clipboard from "expo-clipboard";
+
+const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
+
+interface Referral {
+  _id: string;
+  name: string;
+  email: string;
+  profileImage?: string;
+  createdAt: string;
+}
 
 const Referrals = () => {
+  const [user, setUser] = useState<any>(null);
+  const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [totalEarnings, setTotalEarnings] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const referralCode = "LCM2024";
-  const referralLink = `https://lcm.app/referral/${referralCode}`;
+  useEffect(() => {
+    loadUserData();
+  }, []);
 
-  const stats = {
-    totalReferrals: 12,
-    activeReferrals: 8,
-    totalEarnings: 1200,
-    pendingEarnings: 300,
+  useFocusEffect(
+    useCallback(() => {
+      if (user) {
+        fetchReferrals();
+        fetchTotalEarnings();
+      }
+    }, [user])
+  );
+
+  const loadUserData = async () => {
+    try {
+      const userData = await AsyncStorage.getItem("user");
+      if (userData) {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+      } else {
+        Alert.alert("Error", "Please login to view referrals");
+        router.back();
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const referrals = [
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john@example.com",
-      status: "active",
-      joinedDate: "Dec 1, 2024",
-      earnings: 100,
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      email: "jane@example.com",
-      status: "active",
-      joinedDate: "Nov 28, 2024",
-      earnings: 100,
-    },
-    {
-      id: 3,
-      name: "Mike Johnson",
-      email: "mike@example.com",
-      status: "pending",
-      joinedDate: "Dec 10, 2024",
-      earnings: 0,
-    },
-  ];
+  const fetchReferrals = async () => {
+    if (!user?.id) return;
 
-  const handleCopyCode = () => {
-    // In a real app, you would use Clipboard here
-    setCopied(true);
-    Alert.alert("Copied!", "Referral code copied to clipboard");
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      const response = await axios.get(`${API_BASE_URL}/user/referrals/${user.id}`);
+      if (response.data.success) {
+        setReferrals(response.data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching referrals:", error);
+    }
+  };
+
+  const fetchTotalEarnings = async () => {
+    if (!user?.id) return;
+
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/wallet/${user.id}/transactions`,
+        {
+          params: {
+            page: 1,
+            limit: 100,
+          },
+        }
+      );
+
+      if (response.data.success) {
+        const referralTransactions = (response.data.data.transactions || []).filter(
+          (t: any) => t.description?.includes("Referral bonus") && t.type === "credit"
+        );
+        const total = referralTransactions.reduce((sum: number, t: any) => sum + t.amount, 0);
+        setTotalEarnings(total);
+      }
+    } catch (error) {
+      console.error("Error fetching earnings:", error);
+    }
+  };
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    if (user) {
+      await Promise.all([fetchReferrals(), fetchTotalEarnings()]);
+    }
+    setRefreshing(false);
+  }, [user]);
+
+  const handleCopyCode = async () => {
+    if (user?.referralCode) {
+      await Clipboard.setStringAsync(user.referralCode);
+      setCopied(true);
+      Alert.alert("Copied!", "Referral code copied to clipboard");
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const handleShare = async () => {
     try {
+      const referralCode = user?.referralCode || "";
+      const referralLink = `https://lcm.app/signup?ref=${referralCode}`;
       const message = `Join LCM - The Ultimate Marketing Platform!\n\nUse my referral code: ${referralCode}\n\nGet started: ${referralLink}`;
       await Share.share({
         message: message,
@@ -71,9 +137,43 @@ const Referrals = () => {
     }
   };
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-IN", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6366f1" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const referralCode = user?.referralCode || "N/A";
+  const referralLink = `https://lcm.app/signup?ref=${referralCode}`;
+  const stats = {
+    totalReferrals: referrals.length,
+    activeReferrals: referrals.length,
+    totalEarnings: totalEarnings,
+    pendingEarnings: 0,
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Referrals</Text>
@@ -163,9 +263,9 @@ const Referrals = () => {
               <Text style={styles.stepNumberText}>3</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Earn Rewards</Text>
+              <Text style={styles.stepTitle}>You Earn ₹50</Text>
               <Text style={styles.stepDescription}>
-                You both earn ₹100 when they make their first purchase
+                ₹50 is automatically credited to your wallet
               </Text>
             </View>
           </View>
@@ -174,45 +274,45 @@ const Referrals = () => {
         {/* Referrals List */}
         <View style={styles.referralsListSection}>
           <Text style={styles.sectionTitle}>Your Referrals</Text>
-          {referrals.map((referral) => (
-            <View key={referral.id} style={styles.referralItem}>
-              <View style={styles.referralAvatar}>
-                <Text style={styles.referralAvatarText}>
-                  {referral.name.charAt(0).toUpperCase()}
-                </Text>
-              </View>
-              <View style={styles.referralInfo}>
-                <Text style={styles.referralName}>{referral.name}</Text>
-                <Text style={styles.referralEmail}>{referral.email}</Text>
-                <Text style={styles.referralDate}>Joined: {referral.joinedDate}</Text>
-              </View>
-              <View style={styles.referralEarnings}>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    {
-                      backgroundColor:
-                        referral.status === "active" ? "#dcfce7" : "#fef3c7",
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusText,
-                      {
-                        color: referral.status === "active" ? "#22c55e" : "#f59e0b",
-                      },
-                    ]}
-                  >
-                    {referral.status}
+          {referrals.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="people-outline" size={64} color="#cbd5e1" />
+              <Text style={styles.emptyStateText}>No referrals yet</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Start sharing your referral code to earn rewards!
+              </Text>
+            </View>
+          ) : (
+            referrals.map((referral) => (
+              <View key={referral._id} style={styles.referralItem}>
+                {referral.profileImage ? (
+                  <Image
+                    source={{ uri: referral.profileImage }}
+                    style={styles.referralAvatarImage}
+                  />
+                ) : (
+                  <View style={styles.referralAvatar}>
+                    <Text style={styles.referralAvatarText}>
+                      {referral.name?.charAt(0).toUpperCase() || "U"}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.referralInfo}>
+                  <Text style={styles.referralName}>{referral.name}</Text>
+                  <Text style={styles.referralEmail}>{referral.email}</Text>
+                  <Text style={styles.referralDate}>
+                    Joined: {formatDate(referral.createdAt)}
                   </Text>
                 </View>
-                {referral.earnings > 0 && (
-                  <Text style={styles.earningsText}>₹{referral.earnings}</Text>
-                )}
+                <View style={styles.referralEarnings}>
+                  <View style={[styles.statusBadge, { backgroundColor: "#dcfce7" }]}>
+                    <Text style={[styles.statusText, { color: "#22c55e" }]}>Active</Text>
+                  </View>
+                  <Text style={styles.earningsText}>₹50</Text>
+                </View>
               </View>
-            </View>
-          ))}
+            ))
+          )}
         </View>
 
         {/* Benefits */}
@@ -220,11 +320,11 @@ const Referrals = () => {
           <Text style={styles.sectionTitle}>Benefits</Text>
           <View style={styles.benefitItem}>
             <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-            <Text style={styles.benefitText}>Earn ₹100 for each successful referral</Text>
+            <Text style={styles.benefitText}>Earn ₹50 for each successful referral</Text>
           </View>
           <View style={styles.benefitItem}>
             <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-            <Text style={styles.benefitText}>Your friend gets ₹50 bonus on signup</Text>
+            <Text style={styles.benefitText}>Your friend signs up with your code</Text>
           </View>
           <View style={styles.benefitItem}>
             <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
@@ -489,6 +589,34 @@ const styles = StyleSheet.create({
     color: "#334155",
     marginLeft: 12,
     flex: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyState: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 48,
+  },
+  emptyStateText: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#64748b",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: "#94a3b8",
+    textAlign: "center",
+  },
+  referralAvatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
   },
 });
 
