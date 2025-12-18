@@ -10,9 +10,7 @@ import {
   View,
 } from "react-native";
 import axios from "axios";
-
-// Configure base API URL
-const API_BASE_URL = "https://api.leadscraftmarketing.com/api/v1";
+import { API_BASE_URL } from "../config/api";
 
 // Create axios instance with default config
 const api = axios.create({

@@ -26,8 +26,7 @@ import {
 // For now, we'll use a placeholder
 // import * as ImagePicker from "expo-image-picker";
 import MetaConnectScreen from "../../Components/meta/ConnectMetaAccount";
-
-const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
+import { API_BASE_URL } from "../../config/api";
 
 // Header Component
 const Header = () => (

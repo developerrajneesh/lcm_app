@@ -16,9 +16,9 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
 import { StatusBar } from "expo-status-bar";
 import axios from "axios";
+import { API_BASE_URL } from "../../config/api";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
 
 export default function WorkshopScreen() {
   const { id } = useLocalSearchParams();

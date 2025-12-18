@@ -18,8 +18,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as Clipboard from "expo-clipboard";
-
-const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
+import { API_BASE_URL } from "../../config/api";
 
 interface Referral {
   _id: string;

@@ -17,8 +17,7 @@ import {
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = (SCREEN_WIDTH - 40) / 2 - 10; // 2 columns with spacing
-
-const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
+import { API_BASE_URL } from "../../config/api";
 
 const MyCreatives = () => {
   const [workshops, setWorkshops] = useState([]);

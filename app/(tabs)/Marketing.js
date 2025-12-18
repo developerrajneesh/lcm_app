@@ -22,9 +22,8 @@ import {
   ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as WebBrowser from "expo-web-browser";
-import * as Linking from "expo-linking";
 import axios from "axios";
+import FacebookConnectButton from "../../Components/FacebookConnectButton";
 
 const { width } = Dimensions.get("window");
 
@@ -38,93 +37,6 @@ const MarketingOptionsScreen = () => {
   const [adAccounts, setAdAccounts] = useState([]);
   const [showAccountSelector, setShowAccountSelector] = useState(false);
 
-  // Set up deep link listener for Facebook OAuth callback
-  useEffect(() => {
-    const subscription = Linking.addEventListener('url', handleDeepLink);
-    
-    // Check if app was opened with a deep link
-    Linking.getInitialURL().then((url) => {
-      if (url) {
-        handleDeepLink({ url });
-      }
-    });
-
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  const handleDeepLink = async ({ url }) => {
-    console.log("Deep link received:", url);
-    
-    // Check if this is a Facebook OAuth callback
-    if (url.includes('facebook-callback')) {
-      setIsConnecting(true);
-      
-      // Check for error first
-      const errorMatch = url.match(/[?&#]error=([^&]+)/);
-      if (errorMatch) {
-        const error = decodeURIComponent(errorMatch[1]);
-        const errorDescMatch = url.match(/[?&#]error_description=([^&]+)/);
-        const errorDesc = errorDescMatch ? decodeURIComponent(errorDescMatch[1]) : '';
-        
-        Alert.alert("Facebook Login Error", errorDesc || error);
-        setIsConnecting(false);
-        setShowConnectModal(false);
-        return;
-      }
-      
-      // Extract access token from URL
-      let accessToken = null;
-      
-      // Try to extract from hash fragment (preferred method)
-      const hashIndex = url.indexOf('#');
-      if (hashIndex !== -1) {
-        const hash = url.substring(hashIndex + 1);
-        const params = hash.split('&');
-        
-        for (const param of params) {
-          const [key, value] = param.split('=');
-          if (key === 'access_token') {
-            accessToken = decodeURIComponent(value);
-            break;
-          }
-        }
-      }
-      
-      // If not found in hash, try query params
-      if (!accessToken) {
-        const queryIndex = url.indexOf('?');
-        if (queryIndex !== -1) {
-          const query = url.substring(queryIndex + 1);
-          const params = query.split('&');
-          
-          for (const param of params) {
-            const [key, value] = param.split('=');
-            if (key === 'access_token') {
-              accessToken = decodeURIComponent(value);
-              break;
-            }
-          }
-        }
-      }
-      
-      // If still not found, try regex
-      if (!accessToken) {
-        const match = url.match(/access_token=([^&]+)/);
-        if (match && match[1]) {
-          accessToken = decodeURIComponent(match[1]);
-        }
-      }
-      
-      if (accessToken) {
-        await handleTokenConnection(accessToken);
-      } else {
-        Alert.alert("Error", "Could not extract access token from callback URL.");
-        setIsConnecting(false);
-      }
-    }
-  };
 
   const marketingOptions = [
     {
@@ -140,7 +52,7 @@ const MarketingOptionsScreen = () => {
     },
     {
       id: 2,
-      title: "IVR",
+      title: "IVR Call marketing",
       description:
         "Interactive Voice Response system for automated customer engagement",
       icon: <Ionicons name="call-outline" size={24} color="#10B981" />,
@@ -151,6 +63,18 @@ const MarketingOptionsScreen = () => {
     },
     {
       id: 3,
+      title: "WhatsApp Marketing",
+      description:
+        "Reach customers directly on WhatsApp with personalized messages and campaigns",
+      icon: <Ionicons name="logo-whatsapp" size={24} color="#25D366" />,
+      color: "#25D366",
+      gradient: ["#25D366", "#128C7E"],
+      stats: { engagement: "98%", roi: "4.0x", time: "30m" },
+      route: null,
+      comingSoon: true,
+    },
+    {
+      id: 4,
       title: "Email Marketing",
       description:
         "Create effective email campaigns that convert with our templates",
@@ -162,7 +86,7 @@ const MarketingOptionsScreen = () => {
       comingSoon: true,
     },
     {
-      id: 4,
+      id: 5,
       title: "SMS Marketing",
       description: "Send targeted text messages with high open rates",
       icon: <Ionicons name="chatbubble" size={24} color="#8E44AD" />,
@@ -194,41 +118,16 @@ const MarketingOptionsScreen = () => {
     }
   };
 
-  const handleConnectWithFacebook = async () => {
-    setIsConnecting(true);
-    try {
-      const FACEBOOK_APP_ID = "925493953121496";
-      // Use web redirect URI - backend will handle callback and redirect to app
-      const REDIRECT_URI = "https://api.leadscraftmarketing.com/facebook-callback";
-      
-      // Facebook OAuth URL with required permissions
-      // Using response_type=token for implicit flow (returns token in URL fragment)
-      const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${FACEBOOK_APP_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=token&scope=ads_management,ads_read,business_management,public_profile,email&display=popup`;
-      
-      console.log("Opening Facebook OAuth in external browser:", authUrl);
-      
-      // Open Facebook OAuth in external browser (not in-app browser)
-      await WebBrowser.openBrowserAsync(authUrl, {
-        showInRecents: true,
-        enableBarCollapsing: false,
-      });
-      
-      // Show instruction to user
-      Alert.alert(
-        "Facebook Login",
-        "Please complete the login in the browser. After logging in, you will be redirected back to the app.",
-        [{ text: "OK" }]
-      );
-      
-      // Note: The deep link handler (handleDeepLink) will catch the callback
-      // when Facebook redirects to lcm://facebook-callback
-      // Don't set isConnecting to false here - it will be handled in handleDeepLink
-    } catch (error) {
-      console.error("Facebook OAuth error:", error);
-      Alert.alert("Error", "Failed to connect with Facebook. Please try using access token method.");
-    } finally {
-      setIsConnecting(false);
-    }
+  const handleFacebookConnectSuccess = async (token, accountId) => {
+    setShowConnectModal(false);
+    setConnectMethod(null);
+    setAccessToken("");
+    router.push("/MetaWorker");
+  };
+
+  const handleFacebookConnectError = (error) => {
+    console.error("Facebook connection error:", error);
+    setIsConnecting(false);
   };
 
   const handleTokenConnection = async (token = null) => {
@@ -242,7 +141,7 @@ const MarketingOptionsScreen = () => {
     setIsConnecting(true);
 
     try {
-      const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
+      const { API_BASE_URL } = require("../../config/api");
       
       // Fetch ad accounts using the dedicated endpoint
       const response = await axios.get(`${API_BASE_URL}/campaigns`, {
@@ -505,16 +404,14 @@ const MarketingOptionsScreen = () => {
                   Choose connection method:
                 </Text>
                 
-                <TouchableOpacity
-                  style={[styles.connectOptionButton, { backgroundColor: "#1877F2" }]}
-                  onPress={handleConnectWithFacebook}
+                <FacebookConnectButton
+                  onSuccess={handleFacebookConnectSuccess}
+                  onError={handleFacebookConnectError}
+                  buttonText="Connect with Facebook"
                   disabled={isConnecting}
-                >
-                  <FontAwesome6 name="facebook" size={20} color="#fff" />
-                  <Text style={styles.connectOptionText}>
-                    Connect with Facebook
-                  </Text>
-                </TouchableOpacity>
+                  style={[styles.connectOptionButton, { backgroundColor: "#1877F2" }]}
+                  API_BASE_URL={require("../../config/api").API_BASE_URL}
+                />
 
                 <TouchableOpacity
                   style={[styles.connectOptionButton, { backgroundColor: "#6366f1" }]}
@@ -570,12 +467,6 @@ const MarketingOptionsScreen = () => {
               </View>
             ) : null}
 
-            {isConnecting && connectMethod === "facebook" && (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#1877F2" />
-                <Text style={styles.loadingText}>Connecting to Facebook...</Text>
-              </View>
-            )}
           </View>
         </View>
       </Modal>

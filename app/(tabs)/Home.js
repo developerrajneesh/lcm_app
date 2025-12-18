@@ -1,6 +1,6 @@
 import { FontAwesome5, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -8,9 +8,56 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Dimensions,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
+import { WebView } from "react-native-webview";
+
+// Try to import YoutubePlayer, but handle if it fails
+let YoutubePlayer = null;
+try {
+  YoutubePlayer = require("react-native-youtube-iframe").default;
+} catch (error) {
+  console.log("YoutubePlayer not available, using WebView fallback");
+}
+
+const { width } = Dimensions.get("window");
+const VIDEO_ID = "3gMOYZoMtEs";
+const VIDEO_HEIGHT = (width - 40) * 0.5625; // 16:9 aspect ratio
 
 const HomeScreen = () => {
+  const [userName, setUserName] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+
+  // Check if user is logged in and get user name
+  useFocusEffect(
+    React.useCallback(() => {
+      const checkUserLogin = async () => {
+        try {
+          const userData = await AsyncStorage.getItem("user");
+          const authToken = await AsyncStorage.getItem("authToken");
+          
+          if (userData && authToken) {
+            const user = JSON.parse(userData);
+            setUserName(user.name || null);
+            setIsLoggedIn(true);
+          } else {
+            setUserName(null);
+            setIsLoggedIn(false);
+          }
+        } catch (error) {
+          console.error("Error checking user login:", error);
+          setUserName(null);
+          setIsLoggedIn(false);
+        }
+      };
+
+      checkUserLogin();
+    }, [])
+  );
+
   // Mock data - replace with real data from API
   const stats = {
     totalCampaigns: 12,
@@ -144,7 +191,9 @@ const HomeScreen = () => {
       <View style={styles.welcomeSection}>
         <View style={styles.welcomeContent}>
           <Text style={styles.welcomeText}>Welcome back! 👋</Text>
-          <Text style={styles.userName}>Emily Smith</Text>
+          {isLoggedIn && userName && (
+            <Text style={styles.userName}>{userName}</Text>
+          )}
           <Text style={styles.welcomeSubtext}>Ready to grow your business today?</Text>
         </View>
         <View style={styles.notificationBadge}>
@@ -152,6 +201,56 @@ const HomeScreen = () => {
           <View style={styles.badge}>
             <Text style={styles.badgeText}>3</Text>
           </View>
+        </View>
+      </View>
+
+      {/* Video Section - How to use Our App */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View style={styles.sectionTitleContainer}>
+            <Ionicons name="play-circle" size={24} color="#6366f1" />
+            <Text style={styles.sectionTitle}>How to use Our App</Text>
+          </View>
+        </View>
+        <View style={styles.videoContainer}>
+          {YoutubePlayer && !videoError ? (
+            <YoutubePlayer
+              height={VIDEO_HEIGHT}
+              width={width - 40}
+              videoId={VIDEO_ID}
+              play={false}
+              onChangeState={(event) => {
+                // Handle video state changes if needed
+                if (event === "error") {
+                  setVideoError(true);
+                }
+              }}
+              onError={(error) => {
+                console.error("YouTube player error:", error);
+                setVideoError(true);
+              }}
+            />
+          ) : (
+            <WebView
+              source={{
+                uri: `https://www.youtube.com/embed/${VIDEO_ID}?rel=0&modestbranding=1&playsinline=1`,
+              }}
+              style={styles.videoWebView}
+              allowsFullscreenVideo={true}
+              mediaPlaybackRequiresUserAction={false}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              onError={(syntheticEvent) => {
+                const { nativeEvent } = syntheticEvent;
+                console.error("WebView error: ", nativeEvent);
+                setVideoError(true);
+              }}
+              onHttpError={(syntheticEvent) => {
+                const { nativeEvent } = syntheticEvent;
+                console.error("WebView HTTP error: ", nativeEvent);
+              }}
+            />
+          )}
         </View>
       </View>
 
@@ -619,6 +718,40 @@ const styles = StyleSheet.create({
   },
   bottomSpacing: {
     height: 20,
+  },
+  sectionTitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  videoContainer: {
+    backgroundColor: "#000000",
+    borderRadius: 16,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    height: VIDEO_HEIGHT,
+  },
+  videoWebView: {
+    width: width - 40,
+    height: VIDEO_HEIGHT,
+    backgroundColor: "#000000",
+  },
+  videoErrorContainer: {
+    height: VIDEO_HEIGHT,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "#1e293b",
+  },
+  videoErrorText: {
+    color: "#ffffff",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 12,
   },
 });
 

@@ -7,11 +7,11 @@ const TabBar = () => {
   const [activeTab, setActiveTab] = useState("Home");
 
   const tabs = [
-    { name: "Settings", icon: "settings-outline" },
-    { name: "Subscription", icon: "card-outline" },
-    { name: "Home", icon: "home" },
+    { name: "Marketing", icon: "megaphone-outline" }, 
     { name: "Creatives", icon: "image-outline" },
-    { name: "Marketing", icon: "megaphone-outline" },
+    { name: "Home", icon: "home" },
+    { name: "Subscription", icon: "card-outline" },
+    { name: "Settings", icon: "settings-outline" },
   ];
 
   return (
@@ -23,13 +23,11 @@ const TabBar = () => {
           onPress={() => {
             setActiveTab(tab.name);
             console.log(`${tab.name} pressed`);
-            if (tab.name == "Settings") {
-              //   console.log(`${tab.name} pressed`);
-              router.push("/Settings");
+            if (tab.name == "Marketing") {
+              router.push("/Marketing");
             }
-            if (tab.name == "Subscription") {
-              //   console.log(`${tab.name} pressed`);
-              router.push("/Subscription");
+            if (tab.name == "Creatives") {
+              router.push("/Creatives");
             }
           }}
           style={styles.tabItem}
@@ -75,12 +73,11 @@ const TabBar = () => {
           key={tab.name}
           onPress={() => {
             setActiveTab(tab.name);
-            if (tab.name == "Marketing") {
-              //   console.log(`${tab.name} pressed`);
-              router.push("/Marketing");
+            if (tab.name == "Subscription") {
+              router.push("/Subscription");
             }
-            if (tab.name == "Creatives") {
-              router.push("/Creatives");
+            if (tab.name == "Settings") {
+              router.push("/Settings");
             }
           }}
           style={styles.tabItem}

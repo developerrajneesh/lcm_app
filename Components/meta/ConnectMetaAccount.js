@@ -32,7 +32,7 @@ export default function MetaConnectScreen({ onSuccess }) {
     try {
       // Validate token by fetching ad accounts
       const axios = require("axios");
-      const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
+      const { API_BASE_URL } = require("../../config/api");
       
       // Fetch ad accounts using the dedicated endpoint
       const response = await axios.get(`${API_BASE_URL}/campaigns`, {

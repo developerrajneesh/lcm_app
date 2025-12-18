@@ -19,8 +19,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
-
-const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
+import { API_BASE_URL } from "../../config/api";
 
 const SignUpScreen = () => {
   const [signupData, setSignupData] = useState({

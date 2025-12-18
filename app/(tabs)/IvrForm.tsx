@@ -20,8 +20,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Linking from "expo-linking";
 import * as Clipboard from "expo-clipboard";
-
-const API_BASE_URL = "http://192.168.1.9:5000/api/v1";
+import { API_BASE_URL } from "../../config/api";
 
 const IvrForm = () => {
   const [loading, setLoading] = useState(false);
@@ -353,13 +352,13 @@ const IvrForm = () => {
                 <View style={styles.credentialRow}>
                   <TextInput
                     style={styles.credentialInput}
-                    value={existingRequest.userId}
+                    value={existingRequest.accountUserId || existingRequest.userId || ""}
                     editable={false}
                   />
                   <TouchableOpacity
                     style={styles.copyButton}
                     onPress={() =>
-                      copyToClipboard(existingRequest.userId, "User ID")
+                      copyToClipboard(existingRequest.accountUserId || existingRequest.userId || "", "User ID")
                     }
                   >
                     <Ionicons name="copy-outline" size={20} color="#6366f1" />
@@ -372,14 +371,14 @@ const IvrForm = () => {
                 <View style={styles.credentialRow}>
                   <TextInput
                     style={styles.credentialInput}
-                    value={existingRequest.password}
+                    value={existingRequest.accountPassword || existingRequest.password || ""}
                     editable={false}
-                    secureTextEntry
+                    secureTextEntry={false}
                   />
                   <TouchableOpacity
                     style={styles.copyButton}
                     onPress={() =>
-                      copyToClipboard(existingRequest.password, "Password")
+                      copyToClipboard(existingRequest.accountPassword || existingRequest.password || "", "Password")
                     }
                   >
                     <Ionicons name="copy-outline" size={20} color="#6366f1" />
