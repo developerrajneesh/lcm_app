@@ -54,6 +54,7 @@ const LoginScreen = () => {
           phoneNumber: response.data.user.phoneNumber,
           profileImage: response.data.user.profileImage,
           role: response.data.user.role || "user",
+          referralCode: response.data.user.referralCode,
         };
 
         // Store user data and token

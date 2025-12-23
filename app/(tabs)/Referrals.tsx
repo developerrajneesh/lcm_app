@@ -35,6 +35,7 @@ const Referrals = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [assigningCode, setAssigningCode] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -43,10 +44,33 @@ const Referrals = () => {
   useFocusEffect(
     useCallback(() => {
       if (user) {
+        // Ensure user has id field
+        const currentUser = { ...user };
+        if (!currentUser.id && currentUser._id) {
+          currentUser.id = currentUser._id;
+          setUser(currentUser);
+        }
+        
         fetchReferrals();
         fetchTotalEarnings();
+        
+        // Check if user needs referral code assignment
+        const userId = currentUser.id || currentUser._id;
+        const referralCode = currentUser.referralCode;
+        const hasReferralCode = referralCode && 
+                                referralCode !== "N/A" && 
+                                referralCode !== "null" &&
+                                referralCode !== "undefined" &&
+                                String(referralCode).trim() !== "";
+        
+        if (!hasReferralCode && userId && !assigningCode) {
+          console.log("useFocusEffect: Assigning referral code for user:", userId);
+          assignReferralCode(userId).catch(err => {
+            console.error("Background referral code assignment failed:", err);
+          });
+        }
       }
-    }, [user])
+    }, [user, assigningCode])
   );
 
   const loadUserData = async () => {
@@ -54,7 +78,34 @@ const Referrals = () => {
       const userData = await AsyncStorage.getItem("user");
       if (userData) {
         const parsedUser = JSON.parse(userData);
+        console.log("Loaded user data:", parsedUser);
         setUser(parsedUser);
+        
+        // Ensure user has id field
+        if (!parsedUser.id && parsedUser._id) {
+          parsedUser.id = parsedUser._id;
+        }
+        
+        // Check if user has a referral code, if not, assign one
+        const userId = parsedUser.id || parsedUser._id;
+        const referralCode = parsedUser.referralCode;
+        const hasReferralCode = referralCode && 
+                                referralCode !== "N/A" && 
+                                referralCode !== "null" &&
+                                referralCode !== "undefined" &&
+                                String(referralCode).trim() !== "";
+        
+        console.log("User ID:", userId, "Has referral code:", hasReferralCode, "Referral code:", referralCode);
+        
+        if (!hasReferralCode && userId) {
+          console.log("Assigning referral code for user:", userId);
+          // Don't await, let it run in background
+          assignReferralCode(userId).catch(err => {
+            console.error("Background referral code assignment failed:", err);
+          });
+        } else if (hasReferralCode) {
+          console.log("User already has referral code:", referralCode);
+        }
       } else {
         Alert.alert("Error", "Please login to view referrals");
         router.back();
@@ -63,6 +114,65 @@ const Referrals = () => {
       console.error("Error loading user data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const assignReferralCode = async (userId: string) => {
+    if (assigningCode) {
+      console.log("Already assigning referral code, skipping...");
+      return;
+    }
+    
+    try {
+      setAssigningCode(true);
+      console.log("Assigning referral code for user:", userId);
+      console.log("API URL:", `${API_BASE_URL}/user/assign-referral-code/${userId}`);
+      
+      const response = await axios.post(`${API_BASE_URL}/user/assign-referral-code/${userId}`, {}, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      console.log("Referral code assignment result:", response.data);
+
+      if (response.data.success && response.data.user && response.data.user.referralCode) {
+        // Update user in AsyncStorage and state
+        const currentUserData = await AsyncStorage.getItem("user");
+        if (currentUserData) {
+          const currentUser = JSON.parse(currentUserData);
+          const updatedUser = { 
+            ...currentUser, 
+            referralCode: response.data.user.referralCode 
+          };
+          await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
+          setUser(updatedUser);
+          console.log("Referral code assigned and saved:", response.data.user.referralCode);
+        } else {
+          console.error("No user data found in AsyncStorage");
+        }
+      } else {
+        console.error("Failed to assign referral code:", response.data);
+        // Don't show alert on every check, only log it
+        console.log("Referral code assignment failed, will retry on next visit");
+      }
+    } catch (error: any) {
+      console.error("Error assigning referral code:", error);
+      if (error.response) {
+        console.error("API Error Status:", error.response.status);
+        console.error("API Error Data:", error.response.data);
+        // Only show alert for critical errors, not for every failed attempt
+        if (error.response.status !== 404 && error.response.status !== 400) {
+          console.log("Non-critical error, will retry later");
+        }
+      } else if (error.request) {
+        console.error("No response received:", error.request);
+        console.log("Network error, will retry later");
+      } else {
+        console.error("Error setting up request:", error.message);
+      }
+    } finally {
+      setAssigningCode(false);
     }
   };
 
@@ -155,8 +265,17 @@ const Referrals = () => {
     );
   }
 
-  const referralCode = user?.referralCode || "N/A";
-  const referralLink = `https://lcm.app/signup?ref=${referralCode}`;
+  // Get referral code, handling null, undefined, empty string, and "N/A"
+  const referralCode = (user?.referralCode && 
+                        user.referralCode !== "N/A" && 
+                        user.referralCode !== "null" &&
+                        user.referralCode !== "undefined" &&
+                        String(user.referralCode).trim() !== "") 
+                        ? user.referralCode 
+                        : "N/A";
+  const referralLink = referralCode !== "N/A" 
+    ? `https://lcm.app/signup?ref=${referralCode}` 
+    : `https://lcm.app/signup?ref=`;
   const stats = {
     totalReferrals: referrals.length,
     activeReferrals: referrals.length,

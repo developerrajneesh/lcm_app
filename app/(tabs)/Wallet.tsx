@@ -56,8 +56,11 @@ const WalletScreen = () => {
   useFocusEffect(
     useCallback(() => {
       if (user) {
-        fetchWallet();
-        fetchTransactions();
+        const userId = user.id || user._id;
+        if (userId) {
+          fetchWallet(userId);
+          fetchTransactions(userId, 1, false);
+        }
       }
     }, [user])
   );
@@ -67,41 +70,82 @@ const WalletScreen = () => {
       const userData = await AsyncStorage.getItem("user");
       if (userData) {
         const parsedUser = JSON.parse(userData);
+        // Ensure user has id field
+        if (!parsedUser.id && parsedUser._id) {
+          parsedUser.id = parsedUser._id;
+        }
         setUser(parsedUser);
+        // Load wallet data immediately after user is set
+        if (parsedUser.id || parsedUser._id) {
+          await fetchWallet(parsedUser.id || parsedUser._id);
+          await fetchTransactions(parsedUser.id || parsedUser._id, 1, false);
+        }
       } else {
         Alert.alert("Error", "Please login to view wallet");
         router.back();
       }
     } catch (error) {
       console.error("Error loading user data:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fetchWallet = async () => {
-    if (!user?.id) return;
+  const fetchWallet = async (userId?: string) => {
+    const id = userId || user?.id || user?._id;
+    if (!id) {
+      console.log("No user ID available for wallet fetch");
+      setLoading(false);
+      return;
+    }
     
     try {
       setLoading(true);
-      const response = await axios.get(`${API_BASE_URL}/wallet/${user.id}`);
+      console.log("Fetching wallet for user:", id);
+      const response = await axios.get(`${API_BASE_URL}/wallet/${id}`);
       
       if (response.data.success) {
         setWallet(response.data.data);
+        console.log("Wallet loaded successfully:", response.data.data);
+      } else {
+        console.error("Wallet fetch failed:", response.data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching wallet:", error);
-      Alert.alert("Error", "Failed to load wallet");
+      if (error.response) {
+        console.error("API Error:", error.response.status, error.response.data);
+        // If wallet doesn't exist, create an empty wallet state
+        if (error.response.status === 404) {
+          setWallet({
+            _id: "",
+            userId: id,
+            balance: 0,
+            currency: "INR",
+            transactions: [],
+          });
+        } else {
+          Alert.alert("Error", "Failed to load wallet");
+        }
+      } else {
+        Alert.alert("Error", "Network error. Please check your connection.");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const fetchTransactions = async (pageNum = 1, append = false) => {
-    if (!user?.id) return;
+  const fetchTransactions = async (userId?: string, pageNum = 1, append = false) => {
+    const id = userId || user?.id || user?._id;
+    if (!id) {
+      console.log("No user ID available for transactions fetch");
+      return;
+    }
     
     try {
+      console.log("Fetching transactions for user:", id, "Page:", pageNum);
       const response = await axios.get(
-        `${API_BASE_URL}/wallet/${user.id}/transactions`,
+        `${API_BASE_URL}/wallet/${id}/transactions`,
         {
           params: {
             page: pageNum,
@@ -121,9 +165,19 @@ const WalletScreen = () => {
         
         setHasMore(newTransactions.length === 20);
         setPage(pageNum);
+        console.log("Transactions loaded:", newTransactions.length);
+      } else {
+        console.error("Transactions fetch failed:", response.data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching transactions:", error);
+      if (error.response) {
+        console.error("API Error:", error.response.status, error.response.data);
+      }
+      // Set empty transactions on error
+      if (!append) {
+        setTransactions([]);
+      }
     }
   };
 
@@ -166,8 +220,13 @@ const WalletScreen = () => {
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchWallet();
-    fetchTransactions(1, false);
+    const userId = user?.id || user?._id;
+    if (userId) {
+      fetchWallet(userId);
+      fetchTransactions(userId, 1, false);
+    } else {
+      setRefreshing(false);
+    }
   };
 
   const loadMoreTransactions = () => {
