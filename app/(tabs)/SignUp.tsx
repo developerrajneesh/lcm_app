@@ -101,6 +101,25 @@ const SignUpScreen = () => {
       setSignupError("Password must be at least 8 characters long");
       return;
     }
+    
+    // Phone number is required
+    if (!signupData.phoneNumber || !signupData.phoneNumber.trim()) {
+      setSignupError("Phone number is required");
+      return;
+    }
+    
+    // Validate phone number format
+    const phoneRegex = /^\+?[1-9]\d{1,14}$/;
+    if (!phoneRegex.test(signupData.phoneNumber.replace(/\s/g, ""))) {
+      setSignupError("Please enter a valid phone number");
+      return;
+    }
+    
+    // Profile image is required
+    if (!signupData.profileImage) {
+      setSignupError("Profile image is required");
+      return;
+    }
 
     setSignupLoading(true);
     setSignupError("");
@@ -110,8 +129,8 @@ const SignUpScreen = () => {
         name: signupData.name.trim(),
         email: signupData.email.trim().toLowerCase(),
         password: signupData.password,
-        phoneNumber: signupData.phoneNumber.trim() || undefined,
-        profileImage: signupData.profileImage || undefined,
+        phoneNumber: signupData.phoneNumber.trim(),
+        profileImage: signupData.profileImage,
       });
 
       if (response.data.success) {
@@ -195,7 +214,7 @@ const SignUpScreen = () => {
             <View style={styles.form}>
               {/* Profile Image Upload */}
               <View style={styles.profileImageContainer}>
-                <Text style={styles.inputLabel}>Profile Image (Optional)</Text>
+                <Text style={styles.inputLabel}>Profile Image <Text style={styles.required}>*</Text></Text>
                 <View style={styles.profileImageRow}>
                   {previewImage ? (
                     <View style={styles.profileImagePreviewContainer}>
@@ -263,7 +282,7 @@ const SignUpScreen = () => {
 
               {/* Phone Number */}
               <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Phone Number (Optional)</Text>
+                <Text style={styles.inputLabel}>Phone Number <Text style={styles.required}>*</Text></Text>
                 <TextInput
                   style={styles.input}
                   placeholder="Enter your phone number"
@@ -511,6 +530,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#94a3b8",
     fontWeight: "400",
+  },
+  required: {
+    fontSize: 14,
+    color: "#dc2626",
+    fontWeight: "600",
   },
   submitButton: {
     backgroundColor: "#6366f1",

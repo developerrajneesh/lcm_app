@@ -11,9 +11,19 @@ const MetaWorker = () => {
   const checkConnectionStatus = async () => {
     try {
       const token = await AsyncStorage.getItem("fb_access_token");
-      setIsConnected(!!token);
+      const accountId = await AsyncStorage.getItem("fb_ad_account_id");
+      console.log("🔍 MetaWorker: Checking connection - hasToken:", !!token, "hasAccountId:", !!accountId, "token:", token ? token.substring(0, 20) + "..." : "null");
+      
+      // Check if token exists and is not empty/null/undefined
+      if (token && token.trim() && token !== "null" && token !== "undefined") {
+        console.log("✅ MetaWorker: Token found, setting connected to true");
+        setIsConnected(true);
+      } else {
+        console.log("❌ MetaWorker: No valid token found, setting connected to false");
+        setIsConnected(false);
+      }
     } catch (error) {
-      console.error("Error checking connection status:", error);
+      console.error("❌ MetaWorker: Error checking connection status:", error);
       setIsConnected(false);
     } finally {
       setLoading(false);

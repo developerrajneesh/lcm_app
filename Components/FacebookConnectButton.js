@@ -36,7 +36,7 @@ export default function FacebookConnectButton({
       clientId: FB_APP_ID,
       redirectUri,
       responseType: 'token', // we want access token
-      scopes: ['public_profile', 'email', 'ads_management', 'ads_read', 'business_management'],
+      scopes: ['public_profile', 'email', 'ads_management', 'ads_read', 'business_management', 'whatsapp_business_manage_events', 'whatsapp_business_management', 'whatsapp_business_messaging'],
     },
     discovery
   );

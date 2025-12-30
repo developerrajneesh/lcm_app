@@ -18,6 +18,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { io, Socket } from "socket.io-client";
 import { API_BASE_URL, SOCKET_URL } from "../../config/api";
+import { useSubscription } from "../../hooks/useSubscription";
+import { hasActiveSubscription } from "../../utils/subscription";
+import UpgradeModal from "../../Components/UpgradeModal";
 
 interface Message {
   _id?: string;
@@ -47,8 +50,12 @@ const LiveChat = () => {
   const [loading, setLoading] = useState(true);
   const [adminInfo, setAdminInfo] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const messagesEndRef = useRef<ScrollView>(null);
   const pendingMessagesRef = useRef(new Map<string, number>());
+  
+  // Subscription
+  const { subscription } = useSubscription();
 
   useEffect(() => {
     loadUserData();
@@ -72,6 +79,22 @@ const LiveChat = () => {
 
   useEffect(() => {
     if (!user) return;
+
+    // Check subscription before initializing socket
+    console.log("🔍 LiveChat: Checking subscription");
+    console.log("  - Subscription:", subscription ? "exists" : "null/undefined");
+    
+    const hasActive = hasActiveSubscription(subscription);
+    console.log("  - Has active subscription:", hasActive);
+    
+    if (!hasActive) {
+      console.log("❌ LiveChat: No active subscription - showing upgrade modal");
+      setShowUpgradeModal(true);
+      setLoading(false);
+      return; // Block socket connection
+    }
+    
+    console.log("✅ LiveChat: Subscription check passed - initializing socket");
 
     // Initialize socket connection
     const newSocket = io(SOCKET_URL, {
@@ -240,6 +263,14 @@ const LiveChat = () => {
   };
 
   const handleSend = () => {
+    // Check subscription before sending message
+    const hasActive = hasActiveSubscription(subscription);
+    if (!hasActive) {
+      console.log("❌ LiveChat: No subscription - blocking message send");
+      setShowUpgradeModal(true);
+      return;
+    }
+    
     if (!newMessage.trim() || !socket || !conversationId || !adminInfo) return;
 
     const messageText = newMessage.trim();
@@ -426,6 +457,19 @@ const LiveChat = () => {
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        visible={showUpgradeModal}
+        onClose={() => {
+          console.log("🔒 LiveChat: Upgrade modal closed");
+          setShowUpgradeModal(false);
+          // Navigate back if user closes modal
+          router.back();
+        }}
+        isPremiumFeature={false}
+        featureName="Live Chat Support"
+      />
     </SafeAreaView>
   );
 };

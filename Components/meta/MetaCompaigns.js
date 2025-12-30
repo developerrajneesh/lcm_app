@@ -25,6 +25,9 @@ export default function MetaCompaigns() {
   const [loading, setLoading] = useState(true);
   const [adAccountId, setAdAccountId] = useState(null);
   const [isConnected, setIsConnected] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [nextCursor, setNextCursor] = useState(null);
 
   useEffect(() => {
     loadAdAccountId();
@@ -40,9 +43,17 @@ export default function MetaCompaigns() {
     }
   };
 
-  const fetchCampaigns = async () => {
+  const fetchCampaigns = async (loadMore = false) => {
     try {
-      setLoading(true);
+      if (loadMore) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+        setCampaigns([]); // Clear existing campaigns on refresh
+        setHasMore(true);
+        setNextCursor(null);
+      }
+
       const accessToken = await AsyncStorage.getItem("fb_access_token");
       if (!accessToken) {
         // Token not found - user disconnected, go back to connect screen
@@ -66,34 +77,55 @@ export default function MetaCompaigns() {
           const firstAccountId = accountsResponse.data.adAccounts.data[0].id;
           await AsyncStorage.setItem("fb_ad_account_id", firstAccountId);
           setAdAccountId(firstAccountId);
-          await fetchCampaignsForAccount(firstAccountId, accessToken);
+          await fetchCampaignsForAccount(firstAccountId, accessToken, loadMore);
         } else {
           setCampaigns([]);
         }
       } else {
-        await fetchCampaignsForAccount(accountId, accessToken);
+        await fetchCampaignsForAccount(accountId, accessToken, loadMore);
       }
     } catch (error) {
       console.error("Error fetching campaigns:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.fb?.message ||
-          error.response?.data?.message ||
-          "Failed to fetch campaigns"
-      );
-      setCampaigns([]);
+      
+      // Check for token expiration
+      const { handleTokenExpiration } = require("../../utils/metaErrorHandler");
+      const wasTokenExpired = await handleTokenExpiration(error, () => {
+        setIsConnected(false);
+        router.replace("/MetaWorker");
+      });
+      
+      if (!wasTokenExpired) {
+        Alert.alert(
+          "Error",
+          error.response?.data?.fb?.message ||
+            error.response?.data?.message ||
+            "Failed to fetch campaigns"
+        );
+      }
+      if (!loadMore) {
+        setCampaigns([]);
+      }
     } finally {
       setLoading(false);
+      setLoadingMore(false);
       setRefreshing(false);
     }
   };
 
-  const fetchCampaignsForAccount = async (accountId, accessToken) => {
+  const fetchCampaignsForAccount = async (accountId, accessToken, loadMore = false) => {
     try {
+      const params = {
+        adAccountId: accountId,
+        limit: 25, // Fetch 25 campaigns per page
+      };
+
+      // Add pagination cursor if loading more
+      if (loadMore && nextCursor) {
+        params.after = nextCursor;
+      }
+
       const response = await axios.get(`${API_BASE_URL}/campaigns/all`, {
-        params: {
-          adAccountId: accountId,
-        },
+        params,
         headers: {
           "x-fb-access-token": accessToken,
         },
@@ -109,9 +141,30 @@ export default function MetaCompaigns() {
           createdTime: campaign.created_time,
           updatedTime: campaign.updated_time,
         }));
-        setCampaigns(formattedCampaigns);
+
+        if (loadMore) {
+          // Append new campaigns to existing list
+          setCampaigns((prevCampaigns) => [...prevCampaigns, ...formattedCampaigns]);
+        } else {
+          // Replace campaigns on initial load or refresh
+          setCampaigns(formattedCampaigns);
+        }
+
+        // Check if there are more pages
+        const paging = response.data.campaigns?.paging;
+        if (paging?.cursors?.after) {
+          setNextCursor(paging.cursors.after);
+          setHasMore(true);
+        } else {
+          setNextCursor(null);
+          setHasMore(false);
+        }
       } else {
-        setCampaigns([]);
+        if (!loadMore) {
+          setCampaigns([]);
+        }
+        setHasMore(false);
+        setNextCursor(null);
       }
     } catch (error) {
       console.error("Error fetching campaigns for account:", error);
@@ -130,7 +183,13 @@ export default function MetaCompaigns() {
       router.replace("/MetaWorker");
       return;
     }
-    fetchCampaigns();
+    fetchCampaigns(false); // Reset pagination on refresh
+  };
+
+  const loadMoreCampaigns = () => {
+    if (!loadingMore && hasMore && !loading) {
+      fetchCampaigns(true);
+    }
   };
 
   const filteredCampaigns = campaigns.filter((campaign) => {
@@ -200,7 +259,7 @@ export default function MetaCompaigns() {
       );
 
       Alert.alert("Success", `Campaign ${isPaused ? "activated" : "paused"} successfully`);
-      fetchCampaigns();
+      fetchCampaigns(false); // Reset pagination
     } catch (error) {
       console.error("Error pausing/resuming campaign:", error);
       Alert.alert(
@@ -212,6 +271,44 @@ export default function MetaCompaigns() {
     }
   };
 
+  const handleDelete = async (campaignId, campaignName) => {
+    Alert.alert(
+      "Delete Campaign",
+      `Are you sure you want to delete "${campaignName}"? This action cannot be undone.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const accessToken = await AsyncStorage.getItem("fb_access_token");
+              await axios.delete(`${API_BASE_URL}/campaigns/${campaignId}`, {
+                headers: {
+                  "x-fb-access-token": accessToken,
+                },
+              });
+
+              Alert.alert("Success", "Campaign deleted successfully");
+              fetchCampaigns(false); // Reset pagination
+            } catch (error) {
+              console.error("Error deleting campaign:", error);
+              Alert.alert(
+                "Error",
+                error.response?.data?.fb?.message ||
+                  error.response?.data?.message ||
+                  "Failed to delete campaign"
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderCampaignItem = ({ item }) => {
     const status = item.effectiveStatus || item.status;
     const statusColor = getStatusColor(status);
@@ -221,7 +318,10 @@ export default function MetaCompaigns() {
     return (
       <View style={styles.campaignCard}>
         <View style={styles.campaignHeader}>
-          <Text style={styles.campaignName}>{item.name}</Text>
+          <View style={styles.campaignNameContainer}>
+            <Text style={styles.campaignName}>{item.name}</Text>
+            <Text style={styles.campaignObjective}>{item.objective || "N/A"}</Text>
+          </View>
           <View
             style={[
               styles.statusBadge,
@@ -232,30 +332,6 @@ export default function MetaCompaigns() {
           </View>
         </View>
 
-        <View style={styles.campaignDetails}>
-          <View style={styles.detailRow}>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Objective</Text>
-              <Text style={styles.detailValue}>{item.objective || "N/A"}</Text>
-            </View>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Status</Text>
-              <Text style={styles.detailValue}>{statusText}</Text>
-            </View>
-          </View>
-
-          {item.createdTime && (
-            <View style={styles.detailRow}>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Created</Text>
-                <Text style={styles.detailValue}>
-                  {new Date(item.createdTime).toLocaleDateString()}
-                </Text>
-              </View>
-            </View>
-          )}
-        </View>
-
         <View style={styles.campaignActions}>
           <TouchableOpacity
             style={styles.actionButton}
@@ -264,8 +340,8 @@ export default function MetaCompaigns() {
               params: { campaignId: item.id, campaignName: item.name }
             })}
           >
-            <Ionicons name="layers-outline" size={16} color="#4361EE" />
-            <Text style={[styles.actionText, { color: "#4361EE" }]}>
+            <Ionicons name="layers-outline" size={18} color="#1877F2" />
+            <Text style={[styles.actionText, { color: "#1877F2" }]}>
               View Ad Sets
             </Text>
           </TouchableOpacity>
@@ -275,7 +351,7 @@ export default function MetaCompaigns() {
           >
             <MaterialCommunityIcons
               name={isPaused ? "play" : "pause"}
-              size={16}
+              size={18}
               color={isPaused ? "#4CAF50" : "#FF9800"}
             />
             <Text
@@ -287,6 +363,15 @@ export default function MetaCompaigns() {
               ]}
             >
               {isPaused ? "Resume" : "Pause"}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => handleDelete(item.id, item.name)}
+          >
+            <Ionicons name="trash-outline" size={18} color="#E53935" />
+            <Text style={[styles.actionText, { color: "#E53935" }]}>
+              Delete
             </Text>
           </TouchableOpacity>
         </View>
@@ -391,6 +476,8 @@ export default function MetaCompaigns() {
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
+          onEndReached={loadMoreCampaigns}
+          onEndReachedThreshold={0.5}
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Ionicons name="briefcase-outline" size={64} color="#CCCCCC" />
@@ -401,6 +488,14 @@ export default function MetaCompaigns() {
                   : "Create your first campaign to get started"}
               </Text>
             </View>
+          }
+          ListFooterComponent={
+            loadingMore ? (
+              <View style={styles.loadingMoreContainer}>
+                <ActivityIndicator size="small" color="#1877F2" />
+                <Text style={styles.loadingMoreText}>Loading more campaigns...</Text>
+              </View>
+            ) : null
           }
         />
       )}
@@ -421,11 +516,13 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
+    paddingBottom: 12,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: "bold",
+    fontSize: 24,
+    fontWeight: "700",
     color: "#1a1a1a",
+    flex: 1,
   },
   createButton: {
     flexDirection: "row",
@@ -433,27 +530,39 @@ const styles = StyleSheet.create({
     backgroundColor: "#1877F2",
     paddingVertical: 10,
     paddingHorizontal: 16,
-    borderRadius: 6,
+    borderRadius: 8,
+    shadowColor: "#1877F2",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
   createButtonText: {
     color: "white",
-    fontWeight: "600",
+    fontWeight: "700",
     marginLeft: 6,
+    fontSize: 14,
   },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "white",
     margin: 16,
+    marginTop: 8,
     borderRadius: 8,
     paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 1,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.41,
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
     elevation: 2,
   },
   searchIcon: {
@@ -479,21 +588,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 1.41,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
   },
   tab: {
     flex: 1,
     paddingVertical: 12,
     alignItems: "center",
+    justifyContent: "center",
   },
   activeTab: {
     backgroundColor: "#1877F2",
   },
   tabText: {
     color: "#666",
-    fontWeight: "500",
+    fontWeight: "600",
+    fontSize: 14,
   },
   activeTabText: {
     color: "white",
+    fontWeight: "700",
   },
   listContent: {
     padding: 16,
@@ -503,7 +617,7 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     borderRadius: 12,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 12,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
@@ -512,63 +626,62 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 3.84,
     elevation: 3,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
   },
   campaignHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  campaignNameContainer: {
+    flex: 1,
+    marginRight: 12,
   },
   campaignName: {
     fontSize: 18,
     fontWeight: "bold",
-    flex: 1,
-    marginRight: 12,
+    color: "#1a1a1a",
+    marginBottom: 6,
+  },
+  campaignObjective: {
+    fontSize: 14,
+    color: "#666",
+    fontWeight: "500",
   },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    minWidth: 70,
+    alignItems: "center",
   },
   statusText: {
     color: "white",
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  campaignDetails: {
-    marginBottom: 16,
-  },
-  detailRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  detailItem: {
-    flex: 1,
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 4,
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: "500",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
   campaignActions: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
-    paddingTop: 16,
+    paddingTop: 12,
   },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    paddingVertical: 8,
+    marginHorizontal: 2,
   },
   actionText: {
     marginLeft: 6,
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: "600",
   },
   emptyState: {
     alignItems: "center",
@@ -596,6 +709,16 @@ const styles = StyleSheet.create({
   loadingText: {
     marginTop: 12,
     fontSize: 16,
+    color: "#666",
+  },
+  loadingMoreContainer: {
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingMoreText: {
+    marginTop: 8,
+    fontSize: 14,
     color: "#666",
   },
 });

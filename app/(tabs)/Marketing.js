@@ -24,6 +24,9 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import FacebookConnectButton from "../../Components/FacebookConnectButton";
+import { useSubscription } from "../../hooks/useSubscription";
+import { hasFeatureAccess, hasActiveSubscription, isPremiumFeature } from "../../utils/subscription";
+import UpgradeModal from "../../Components/UpgradeModal";
 
 const { width } = Dimensions.get("window");
 
@@ -36,7 +39,40 @@ const MarketingOptionsScreen = () => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [adAccounts, setAdAccounts] = useState([]);
   const [showAccountSelector, setShowAccountSelector] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeFeatureName, setUpgradeFeatureName] = useState("");
+  
+  // Subscription
+  const { subscription, loading: subscriptionLoading } = useSubscription();
 
+  // Debug subscription state changes
+  useEffect(() => {
+    console.log("📊 Marketing: Subscription state changed");
+    console.log("  - Loading:", subscriptionLoading);
+    console.log("  - Subscription:", subscription ? JSON.stringify(subscription, null, 2) : "null/undefined");
+    if (subscription) {
+      console.log("  - Plan ID:", subscription.planId);
+      console.log("  - Status:", subscription.subscriptionStatus);
+      console.log("  - End Date:", subscription.endDate);
+    }
+  }, [subscription, subscriptionLoading]);
+
+  // Check token on component mount for debugging
+  useEffect(() => {
+    const checkTokenOnMount = async () => {
+      try {
+        const token = await AsyncStorage.getItem("fb_access_token");
+        const accountId = await AsyncStorage.getItem("fb_ad_account_id");
+        console.log("🔍 Marketing: Component mounted - Token check");
+        console.log("  - Has token:", !!token);
+        console.log("  - Token length:", token?.length || 0);
+        console.log("  - Has account ID:", !!accountId);
+      } catch (error) {
+        console.error("❌ Marketing: Error checking token on mount:", error);
+      }
+    };
+    checkTokenOnMount();
+  }, []);
 
   const marketingOptions = [
     {
@@ -48,7 +84,8 @@ const MarketingOptionsScreen = () => {
       color: "#1877F2",
       gradient: ["#1877F2", "#0A5BC4"],
       stats: { engagement: "92%", roi: "3.5x", time: "24h" },
-      route: "/MetaWorker",
+      route: null, // Route handled manually after subscription check
+      requiredFeature: "meta-ads",
     },
     {
       id: 2,
@@ -60,6 +97,8 @@ const MarketingOptionsScreen = () => {
       gradient: ["#10B981", "#059669"],
       stats: { engagement: "90%", roi: "3.0x", time: "48h" },
       route: "/IvrForm",
+      requiredFeature: "ivr-campaign",
+      isPremium: true,
     },
     {
       id: 3,
@@ -94,19 +133,121 @@ const MarketingOptionsScreen = () => {
       gradient: ["#8E44AD", "#6C3483"],
       stats: { engagement: "95%", roi: "3.2x", time: "1h" },
       route: null,
-      comingSoon: true,
+      comingSoon: false,
+      requiredFeature: "sms-marketing",
+      isPremium: true,
+    },
+    {
+      id: 6,
+      title: "UGC Pro Video",
+      description: "Professional UGC video editing services for your marketing campaigns",
+      icon: <Ionicons name="videocam" size={24} color="#FF6B6B" />,
+      color: "#FF6B6B",
+      gradient: ["#FF6B6B", "#EE5A6F"],
+      stats: { engagement: "88%", roi: "3.8x", time: "72h" },
+      route: "/UgcProVideo",
+      comingSoon: false,
+      requiredFeature: null,
+      isPremium: false,
     },
   ];
 
-  const handleOptionPress = (option) => {
+  const handleOptionPress = async (option) => {
     if (option.comingSoon) {
       Alert.alert("Coming Soon", `${option.title} is currently under development. We're working hard to bring you this amazing feature soon!`);
       return;
     }
+    
+    // CRITICAL: Check subscription FIRST for ALL features, especially Meta Ads
+    // Meta Ads (id === 1) MUST have subscription check before ANY navigation
+    const needsSubscriptionCheck = option.id === 1 || option.requiredFeature;
+    
+    if (needsSubscriptionCheck) {
+      console.log("🔍 Marketing: Checking subscription for", option.title, "(ID:", option.id, ")");
+      console.log("  - Subscription:", subscription ? JSON.stringify(subscription) : "null/undefined");
+      console.log("  - Required feature:", option.requiredFeature || "meta-ads");
+      
+      // Check if user has active subscription and feature access
+      const hasActive = hasActiveSubscription(subscription);
+      const featureToCheck = option.requiredFeature || "meta-ads";
+      const hasAccess = hasFeatureAccess(subscription, featureToCheck);
+      
+      console.log("  - Has active subscription:", hasActive);
+      console.log("  - Has feature access:", hasAccess);
+      console.log("  - Subscription object:", subscription);
+      
+      // Show upgrade modal if no subscription or no access
+      // This MUST block ALL navigation for Meta Ads
+      if (!hasActive || !hasAccess) {
+        console.log("❌ Marketing: Subscription check FAILED - BLOCKING ALL NAVIGATION");
+        console.log("  - Setting upgradeFeatureName to:", option.title);
+        console.log("  - Setting showUpgradeModal to: true");
+        setUpgradeFeatureName(option.title);
+        setShowUpgradeModal(true);
+        console.log("  - Modal state updated, should be visible now");
+        console.log("  - RETURNING EARLY - NO NAVIGATION ALLOWED");
+        console.log("  - This return prevents token check and route navigation");
+        return; // CRITICAL: Return early to prevent ANY navigation or token check
+      }
+      
+      console.log("✅ Marketing: Subscription check PASSED - allowing navigation");
+    }
+    
+    // Only proceed with token check if subscription is valid AND check passed
+    // This block should NOT execute if subscription check failed (due to return above)
     if (option.id === 1) {
-      // Meta Ads - show connect modal
-      setShowConnectModal(true);
-    } else if (option.route) {
+      // Meta Ads - check if token exists first
+      try {
+        const token = await AsyncStorage.getItem("fb_access_token");
+        const accountId = await AsyncStorage.getItem("fb_ad_account_id");
+        
+        // Debug logging
+        console.log("🔍 Marketing: Checking token");
+        console.log("  - Token exists:", !!token);
+        console.log("  - Token length:", token?.length || 0);
+        console.log("  - Token value (first 20 chars):", token ? token.substring(0, 20) + "..." : "null");
+        console.log("  - Account ID exists:", !!accountId);
+        
+        // Validate token - check if it's a valid non-empty string
+        const isValidToken = token && 
+                            typeof token === "string" && 
+                            token.trim().length > 0 && 
+                            token !== "null" && 
+                            token !== "undefined" &&
+                            token.trim() !== "";
+        
+        if (isValidToken) {
+          // Token exists and is valid - navigate directly to MetaWorker
+          console.log("✅ Marketing: Valid token found, navigating to MetaWorker");
+          router.push("/MetaWorker");
+        } else {
+          // No valid token - show connect modal
+          console.log("❌ Marketing: No valid token found");
+          console.log("  - Token is:", token === null ? "null" : token === undefined ? "undefined" : `"${token}"`);
+          setShowConnectModal(true);
+        }
+      } catch (error) {
+        console.error("❌ Marketing: Error checking token:", error);
+        // On error, show connect modal
+        setShowConnectModal(true);
+      }
+      return; // IMPORTANT: Return after handling Meta Ads to prevent route navigation
+    }
+    
+    // Handle other routes (only if not Meta Ads and subscription check passed)
+    if (option.route && option.id !== 1) {
+      // Double-check subscription if required
+      if (option.requiredFeature) {
+        const hasActive = hasActiveSubscription(subscription);
+        const hasAccess = hasFeatureAccess(subscription, option.requiredFeature);
+        if (!hasActive || !hasAccess) {
+          console.log("❌ Marketing: Route navigation blocked - no subscription");
+          setUpgradeFeatureName(option.title);
+          setShowUpgradeModal(true);
+          return;
+        }
+      }
+      console.log("📍 Marketing: Navigating to route:", option.route);
       router.push(option.route);
     } else {
       setSelectedOption(option);
@@ -119,10 +260,35 @@ const MarketingOptionsScreen = () => {
   };
 
   const handleFacebookConnectSuccess = async (token, accountId) => {
-    setShowConnectModal(false);
-    setConnectMethod(null);
-    setAccessToken("");
-    router.push("/MetaWorker");
+    try {
+      console.log("✅ Marketing: Facebook connect success callback");
+      console.log("  - Token received:", token ? token.substring(0, 20) + "..." : "null");
+      console.log("  - Account ID received:", accountId || "null");
+      
+      if (token && typeof token === "string" && token.trim().length > 0) {
+        await AsyncStorage.setItem("fb_access_token", token.trim());
+        console.log("✅ Marketing: Token saved to AsyncStorage");
+        
+        // Verify it was saved
+        const savedToken = await AsyncStorage.getItem("fb_access_token");
+        console.log("✅ Marketing: Verified saved token:", savedToken ? savedToken.substring(0, 20) + "..." : "null");
+      } else {
+        console.warn("⚠️ Marketing: Invalid token received in handleFacebookConnectSuccess");
+      }
+      
+      if (accountId && typeof accountId === "string" && accountId.trim().length > 0) {
+        await AsyncStorage.setItem("fb_ad_account_id", accountId.trim());
+        console.log("✅ Marketing: Account ID saved to AsyncStorage");
+      }
+      
+      setShowConnectModal(false);
+      setConnectMethod(null);
+      setAccessToken("");
+      router.push("/MetaWorker");
+    } catch (error) {
+      console.error("❌ Marketing: Error saving token in handleFacebookConnectSuccess:", error);
+      Alert.alert("Error", "Failed to save connection. Please try again.");
+    }
   };
 
   const handleFacebookConnectError = (error) => {
@@ -151,7 +317,14 @@ const MarketingOptionsScreen = () => {
       });
 
       if (response.data.success) {
-        await AsyncStorage.setItem("fb_access_token", tokenToUse);
+        console.log("✅ Marketing: Token validated, saving to AsyncStorage");
+        const tokenToSave = tokenToUse.trim();
+        await AsyncStorage.setItem("fb_access_token", tokenToSave);
+        console.log("✅ Marketing: Token saved successfully");
+        
+        // Verify it was saved
+        const savedToken = await AsyncStorage.getItem("fb_access_token");
+        console.log("✅ Marketing: Verified saved token:", savedToken ? savedToken.substring(0, 20) + "..." : "null");
         
         // Get ad accounts from response
         const accounts = response.data.adAccounts?.data || [];
@@ -171,7 +344,9 @@ const MarketingOptionsScreen = () => {
         if (validAccounts.length === 1) {
           // Only one account - auto-select it
           const accountId = validAccounts[0].id;
+          console.log("✅ Marketing: Saving account ID:", accountId);
           await AsyncStorage.setItem("fb_ad_account_id", accountId);
+          console.log("✅ Marketing: Account ID saved successfully");
           Alert.alert(
             "Success",
             "Your Meta account has been connected successfully!"
@@ -182,6 +357,7 @@ const MarketingOptionsScreen = () => {
           router.push("/MetaWorker");
         } else {
           // Multiple accounts - show selection modal
+          console.log("✅ Marketing: Multiple accounts found, showing selector");
           setAdAccounts(validAccounts);
           setShowAccountSelector(true);
         }
@@ -204,7 +380,9 @@ const MarketingOptionsScreen = () => {
 
   const handleAccountSelect = async (accountId) => {
     try {
+      console.log("✅ Marketing: Saving selected account ID:", accountId);
       await AsyncStorage.setItem("fb_ad_account_id", accountId);
+      console.log("✅ Marketing: Account ID saved successfully");
       setShowAccountSelector(false);
       setShowConnectModal(false);
       setAccessToken("");
@@ -215,7 +393,7 @@ const MarketingOptionsScreen = () => {
       );
       router.push("/MetaWorker");
     } catch (error) {
-      console.error("Error saving ad account:", error);
+      console.error("❌ Marketing: Error saving ad account:", error);
       Alert.alert("Error", "Failed to save ad account selection");
     }
   };
@@ -514,6 +692,17 @@ const MarketingOptionsScreen = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        visible={showUpgradeModal}
+        onClose={() => {
+          console.log("🔒 Marketing: Upgrade modal closed");
+          setShowUpgradeModal(false);
+        }}
+        isPremiumFeature={upgradeFeatureName === "IVR Call marketing" || upgradeFeatureName === "SMS Marketing"}
+        featureName={upgradeFeatureName || "Meta Ads"}
+      />
     </SafeAreaView>
   );
 };

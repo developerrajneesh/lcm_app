@@ -5,10 +5,8 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
   RefreshControl,
   SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -26,20 +24,7 @@ export default function AdSetsScreen() {
   const [activeTab, setActiveTab] = useState("all");
   const [loading, setLoading] = useState(true);
   const [adSets, setAdSets] = useState([]);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [adAccountId, setAdAccountId] = useState(null);
-  
-  // Create Ad Set Form State
-  const [adSetForm, setAdSetForm] = useState({
-    name: "",
-    dailyBudget: "",
-    optimizationGoal: "LINK_CLICKS",
-    billingEvent: "IMPRESSIONS",
-    location: "US",
-    ageMin: "18",
-    ageMax: "65",
-  });
 
   useEffect(() => {
     if (campaignId) {
@@ -98,12 +83,21 @@ export default function AdSetsScreen() {
       }
     } catch (error) {
       console.error("Error fetching ad sets:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.fb?.message ||
-          error.response?.data?.message ||
-          "Failed to fetch ad sets"
-      );
+      
+      // Check for token expiration
+      const { handleTokenExpiration } = require("../../utils/metaErrorHandler");
+      const wasTokenExpired = await handleTokenExpiration(error, () => {
+        router.replace("/MetaWorker");
+      });
+      
+      if (!wasTokenExpired) {
+        Alert.alert(
+          "Error",
+          error.response?.data?.fb?.message ||
+            error.response?.data?.message ||
+            "Failed to fetch ad sets"
+        );
+      }
       setAdSets([]);
     } finally {
       setLoading(false);
@@ -195,86 +189,44 @@ export default function AdSetsScreen() {
     }
   };
 
-  const handleCreateAdSet = async () => {
-    if (!adSetForm.name.trim()) {
-      Alert.alert("Error", "Please enter an ad set name");
-      return;
-    }
-    if (!adSetForm.dailyBudget || parseFloat(adSetForm.dailyBudget) < 225) {
-      Alert.alert("Error", "Daily budget must be at least ₹225.00");
-      return;
-    }
-    if (!adAccountId) {
-      Alert.alert("Error", "Ad account ID not found. Please reconnect your Meta account.");
-      return;
-    }
-
-    setCreating(true);
-
-    try {
-      const accessToken = await AsyncStorage.getItem("fb_access_token");
-      
-      // Convert budget to paise (×100) - Meta uses paise for INR
-      const dailyBudgetPaise = Math.round(parseFloat(adSetForm.dailyBudget) * 100);
-
-      const targetingData = {
-        geo_locations: {
-          countries: [adSetForm.location],
-        },
-        age_min: parseInt(adSetForm.ageMin) || 18,
-        age_max: parseInt(adSetForm.ageMax) || 65,
-        interests: [],
-      };
-
-      const response = await axios.post(
-        `${API_BASE_URL}/adsets`,
+  const handleDelete = async (adSetId, adSetName) => {
+    Alert.alert(
+      "Delete Ad Set",
+      `Are you sure you want to delete "${adSetName}"? This action cannot be undone.`,
+      [
         {
-          campaignId: campaignId,
-          adAccountId: adAccountId,
-          name: adSetForm.name.trim(),
-          optimizationGoal: adSetForm.optimizationGoal,
-          billingEvent: adSetForm.billingEvent,
-          dailyBudget: dailyBudgetPaise,
-          targeting: targetingData,
-          status: "PAUSED",
-          autoFixBudget: false,
+          text: "Cancel",
+          style: "cancel",
         },
         {
-          headers: {
-            "x-fb-access-token": accessToken,
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const accessToken = await AsyncStorage.getItem("fb_access_token");
+              await axios.delete(`${API_BASE_URL}/adsets/${adSetId}`, {
+                headers: {
+                  "x-fb-access-token": accessToken,
+                },
+              });
+
+              Alert.alert("Success", "Ad Set deleted successfully");
+              fetchAdSets();
+            } catch (error) {
+              console.error("Error deleting ad set:", error);
+              Alert.alert(
+                "Error",
+                error.response?.data?.fb?.message ||
+                  error.response?.data?.message ||
+                  "Failed to delete ad set"
+              );
+            }
           },
-        }
-      );
-
-      if (response.data.success) {
-        Alert.alert("Success", "Ad Set created successfully!");
-        setShowCreateModal(false);
-        setAdSetForm({
-          name: "",
-          dailyBudget: "",
-          optimizationGoal: "LINK_CLICKS",
-          billingEvent: "IMPRESSIONS",
-          location: "US",
-          ageMin: "18",
-          ageMax: "65",
-        });
-        fetchAdSets();
-      } else {
-        throw new Error(response.data.message || "Failed to create ad set");
-      }
-    } catch (error) {
-      console.error("Error creating ad set:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.fb?.message ||
-          error.response?.data?.message ||
-          error.message ||
-          "Failed to create ad set. Please try again."
-      );
-    } finally {
-      setCreating(false);
-    }
+        },
+      ]
+    );
   };
+
 
   const renderAdSetItem = ({ item }) => {
     const status = item.effectiveStatus || item.status;
@@ -365,6 +317,15 @@ export default function AdSetsScreen() {
               {isPaused ? "Resume" : "Pause"}
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => handleDelete(item.id, item.name)}
+          >
+            <Ionicons name="trash-outline" size={16} color="#E53935" />
+            <Text style={[styles.actionText, { color: "#E53935" }]}>
+              Delete
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -389,7 +350,16 @@ export default function AdSetsScreen() {
         </View>
         <TouchableOpacity
           style={styles.createButton}
-          onPress={() => setShowCreateModal(true)}
+          onPress={() => {
+            router.push({
+              pathname: "/MetaAdsScreen",
+              params: {
+                step: "2",
+                campaignId: campaignId,
+                campaignName: campaignName || "",
+              },
+            });
+          }}
         >
           <Ionicons name="add" size={20} color="white" />
           <Text style={styles.createButtonText}>Create</Text>
@@ -515,120 +485,6 @@ export default function AdSetsScreen() {
         </>
       )}
 
-      {/* Create Ad Set Modal */}
-      <Modal
-        visible={showCreateModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCreateModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create Ad Set</Text>
-              <TouchableOpacity
-                onPress={() => setShowCreateModal(false)}
-                style={styles.modalCloseButton}
-              >
-                <Ionicons name="close" size={24} color="#1e293b" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView style={styles.modalContent} showsVerticalScrollIndicator={false}>
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Ad Set Name *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="e.g., Summer Sale - AdSet"
-                  value={adSetForm.name}
-                  onChangeText={(text) =>
-                    setAdSetForm({ ...adSetForm, name: text })
-                  }
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Daily Budget (₹) *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="Minimum: 225"
-                  value={adSetForm.dailyBudget}
-                  onChangeText={(text) =>
-                    setAdSetForm({ ...adSetForm, dailyBudget: text })
-                  }
-                  keyboardType="numeric"
-                />
-                <Text style={styles.formHint}>Minimum: ₹225.00 per day</Text>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Optimization Goal</Text>
-                <View style={styles.selectContainer}>
-                  <Text style={styles.selectText}>{adSetForm.optimizationGoal}</Text>
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Billing Event</Text>
-                <View style={styles.selectContainer}>
-                  <Text style={styles.selectText}>{adSetForm.billingEvent}</Text>
-                </View>
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Location</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="e.g., US, IN"
-                  value={adSetForm.location}
-                  onChangeText={(text) =>
-                    setAdSetForm({ ...adSetForm, location: text.toUpperCase() })
-                  }
-                />
-              </View>
-
-              <View style={styles.formRow}>
-                <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
-                  <Text style={styles.formLabel}>Min Age</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    placeholder="18"
-                    value={adSetForm.ageMin}
-                    onChangeText={(text) =>
-                      setAdSetForm({ ...adSetForm, ageMin: text })
-                    }
-                    keyboardType="numeric"
-                  />
-                </View>
-                <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
-                  <Text style={styles.formLabel}>Max Age</Text>
-                  <TextInput
-                    style={styles.formInput}
-                    placeholder="65"
-                    value={adSetForm.ageMax}
-                    onChangeText={(text) =>
-                      setAdSetForm({ ...adSetForm, ageMax: text })
-                    }
-                    keyboardType="numeric"
-                  />
-                </View>
-              </View>
-
-              <TouchableOpacity
-                style={[styles.submitButton, creating && styles.submitButtonDisabled]}
-                onPress={handleCreateAdSet}
-                disabled={creating}
-              >
-                {creating ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Create Ad Set</Text>
-                )}
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
@@ -872,6 +728,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#f0f0f0",
     paddingTop: 16,
+    gap: 8,
   },
   actionButton: {
     flexDirection: "row",

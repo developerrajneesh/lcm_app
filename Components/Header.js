@@ -3,10 +3,12 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
+import NotificationBadge from "./NotificationBadge";
 
 const Header = () => {
   const [userProfileImage, setUserProfileImage] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userId, setUserId] = useState(null);
   const intervalRef = useRef(null);
 
   // Function to check user login status
@@ -18,9 +20,11 @@ const Header = () => {
       if (userData && authToken) {
         const user = JSON.parse(userData);
         setUserProfileImage(user.profileImage || null);
+        setUserId(user.id || user._id || null);
         setIsLoggedIn(true);
       } else {
         setUserProfileImage(null);
+        setUserId(null);
         setIsLoggedIn(false);
       }
     } catch (error) {
@@ -60,7 +64,11 @@ const Header = () => {
       <Text style={styles.headerTitle}>LCM</Text>
       <View style={styles.headerIcons}>
         {/* Notifications */}
-        <Ionicons name="notifications-outline" size={24} color="#000" />
+        {isLoggedIn && userId ? (
+          <NotificationBadge userId={userId} iconSize={24} iconColor="#000" />
+        ) : (
+          <Ionicons name="notifications-outline" size={24} color="#000" />
+        )}
 
         {/* Profile Image - Only show if user is logged in */}
         {isLoggedIn && userProfileImage && (

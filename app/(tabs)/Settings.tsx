@@ -19,6 +19,9 @@ import {
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSubscription } from "../../hooks/useSubscription";
+import { hasActiveSubscription } from "../../utils/subscription";
+import UpgradeModal from "../../Components/UpgradeModal";
 
 const SettingsScreen = () => {
   const [user, setUser] = useState(null);
@@ -27,6 +30,10 @@ const SettingsScreen = () => {
   const [signupLoading, setSignupLoading] = useState(false);
   const [signupError, setSignupError] = useState("");
   const [isMetaConnected, setIsMetaConnected] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  
+  // Subscription
+  const { subscription } = useSubscription();
 
   useEffect(() => {
     checkAuthStatus();
@@ -139,13 +146,6 @@ const SettingsScreen = () => {
       icon: <Ionicons name="chatbubbles-outline" size={22} color="#0ea5e9" />,
       bgColor: "#e0f2fe",
       route: "/LiveChat",
-      requiresAuth: true,
-    },
-    {
-      label: "Wallet",
-      icon: <Ionicons name="wallet-outline" size={22} color="#22c55e" />,
-      bgColor: "#dcfce7",
-      route: "/Wallet",
       requiresAuth: true,
     },
     {
@@ -271,6 +271,21 @@ const SettingsScreen = () => {
                   if (item.action === "logout") {
                     handleLogout();
                   } else if (item.route) {
+                    // Check subscription for Live Chat
+                    if (item.route === "/LiveChat" || item.label === "Live Chat") {
+                      console.log("🔍 Settings: Live Chat clicked, checking subscription");
+                      const hasActive = hasActiveSubscription(subscription);
+                      console.log("  - Has active subscription:", hasActive);
+                      
+                      if (!hasActive) {
+                        console.log("❌ Settings: No subscription - showing upgrade modal");
+                        setShowUpgradeModal(true);
+                        return; // Block navigation
+                      }
+                      
+                      console.log("✅ Settings: Subscription check passed - navigating to Live Chat");
+                    }
+                    
                     router.push(item.route as any);
                   }
                 }}
@@ -314,6 +329,17 @@ const SettingsScreen = () => {
         {/* App Version */}
         <Text style={styles.versionText}>App Version 2.4.1</Text>
       </ScrollView>
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        visible={showUpgradeModal}
+        onClose={() => {
+          console.log("🔒 Settings: Upgrade modal closed");
+          setShowUpgradeModal(false);
+        }}
+        isPremiumFeature={false}
+        featureName="Live Chat Support"
+      />
     </SafeAreaView>
   );
 };

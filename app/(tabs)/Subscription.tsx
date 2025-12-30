@@ -1,6 +1,6 @@
 import { FontAwesome5, Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -8,34 +8,96 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  Alert,
+  Modal,
 } from "react-native";
+import { WebView } from "react-native-webview";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import { API_BASE_URL } from "../../config/api";
 
 const Subscription = () => {
+  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState(null);
+  const [showPaymentWebView, setShowPaymentWebView] = useState(false);
+  const [paymentHtml, setPaymentHtml] = useState("");
+  const [currentPlan, setCurrentPlan] = useState<any>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
+  // Load user data on mount
+  useEffect(() => {
+    loadUserData();
+  }, []);
+
+  // Refresh user data when screen comes into focus (after login/logout)
+  useFocusEffect(
+    useCallback(() => {
+      loadUserData();
+    }, [])
+  );
+
+  const loadUserData = async () => {
+    try {
+      const userData = await AsyncStorage.getItem("user");
+      const token = await AsyncStorage.getItem("authToken");
+      
+      // Clear user state if no data found (logout scenario)
+      if (!userData) {
+        setUser(null);
+        setAuthToken(null);
+        return;
+      }
+      
+      // Set user data if found (login scenario)
+      if (userData) {
+        setUser(JSON.parse(userData));
+      }
+      if (token) {
+        setAuthToken(token);
+      } else {
+        setAuthToken(null);
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
+      // On error, clear user state
+      setUser(null);
+      setAuthToken(null);
+    }
+  };
+
   const plans = [
     {
       id: 1,
       name: "BASIC PLAN",
-      regularPrice: "₹999",
-      earlyBirdPrice: "₹999",
+      regularPrice: 2000,
+      earlyBirdPrice: 999,
+      discount: 50,
       period: "month",
       features: [
-        "Unlimited Creatives",
-        "Meta Ads Access",
-        "No Hidden Fees",
+        "Meta Ads",
+        "WhatsApp Marketing",
+        "Email Marketing",
+        "Premium Festival Creatives",
+        "Basic Customer Support",
       ],
       popular: false,
     },
     {
       id: 2,
       name: "PREMIUM PLAN",
-      regularPrice: "₹1,999",
-      earlyBirdPrice: "₹1,499",
+      regularPrice: 5000,
+      earlyBirdPrice: 2999,
+      discount: 40,
       period: "month",
       features: [
-        "Meta Ads - Full Access",
-        "Unlimited Creatives",
-        "IVR / Voice Campaigns - Full Access",
+        "Meta Ads",
+        "WhatsApp Marketing",
+        "Email Marketing",
+        "SMS Marketing",
+        "IVR Voice Campaign",
         "24x7 Priority Support",
+        "Premium Festival Creatives",
       ],
       popular: true,
     },
@@ -57,9 +119,158 @@ const Subscription = () => {
     "Real-Time Performance Dashboard",
   ];
 
-  const handleSubscribe = (planId: number) => {
-    // Handle subscription logic
-    console.log(`Subscribing to plan ${planId}`);
+  const handleSubscribe = async (plan: typeof plans[0]) => {
+    if (!user) {
+      Alert.alert("Login Required", "Please login to subscribe", [
+        { text: "OK", onPress: () => router.push("/Login") },
+      ]);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const authToken = await AsyncStorage.getItem("authToken");
+      const userId = user.id || user._id;
+
+      // Create order on backend
+      const config: any = {};
+      if (authToken) {
+        config.headers = {
+          Authorization: `Bearer ${authToken}`,
+        };
+      }
+
+      const orderResponse = await axios.post(
+        `${API_BASE_URL}/subscription/create-order`,
+        {
+          amount: plan.earlyBirdPrice,
+          currency: "INR",
+          planId: plan.id,
+          planName: plan.name,
+          userId: userId,
+        },
+        config
+      );
+
+      if (!orderResponse.data.success) {
+        throw new Error(orderResponse.data.message || "Failed to create order");
+      }
+
+      const { order, keyId } = orderResponse.data;
+
+      // Create HTML for Razorpay checkout
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+        </head>
+        <body style="margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f5f5f5;">
+          <div id="razorpay-container"></div>
+          <script>
+            var options = {
+              "key": "${keyId}",
+              "amount": "${order.amount}",
+              "currency": "INR",
+              "name": "LCM",
+              "description": "${plan.name} Subscription",
+              "order_id": "${order.id}",
+              "handler": function (response) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'success',
+                  data: response
+                }));
+              },
+              "prefill": {
+                "name": "${user.name || ""}",
+                "email": "${user.email || ""}",
+                "contact": "${user.phoneNumber || ""}"
+              },
+              "theme": {
+                "color": "#6366f1"
+              },
+              "modal": {
+                "ondismiss": function() {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'cancelled'
+                  }));
+                }
+              }
+            };
+            var rzp = new Razorpay(options);
+            rzp.open();
+          </script>
+        </body>
+        </html>
+      `;
+
+      setCurrentPlan(plan);
+      setPaymentHtml(htmlContent);
+      setShowPaymentWebView(true);
+    } catch (error: any) {
+      console.error("Subscription error:", error);
+      Alert.alert(
+        "Error",
+        error.response?.data?.message || error.message || "Failed to process subscription"
+      );
+      setLoading(false);
+    }
+  };
+
+  const handleWebViewMessage = async (event: any) => {
+    try {
+      const message = JSON.parse(event.nativeEvent.data);
+      
+      if (message.type === "cancelled") {
+        setShowPaymentWebView(false);
+        setLoading(false);
+        return;
+      }
+
+      if (message.type === "success") {
+        setShowPaymentWebView(false);
+        
+        // Verify payment on backend
+        const verifyConfig: any = {};
+        if (authToken) {
+          verifyConfig.headers = {
+            Authorization: `Bearer ${authToken}`,
+          };
+        }
+
+        const verifyResponse = await axios.post(
+          `${API_BASE_URL}/subscription/verify-payment`,
+          {
+            razorpay_order_id: message.data.razorpay_order_id,
+            razorpay_payment_id: message.data.razorpay_payment_id,
+            razorpay_signature: message.data.razorpay_signature,
+            planId: currentPlan.id,
+            planName: currentPlan.name,
+            amount: currentPlan.earlyBirdPrice,
+            userId: user?.id || user?._id,
+          },
+          verifyConfig
+        );
+
+        if (verifyResponse.data.success) {
+          Alert.alert(
+            "Success",
+            "Payment successful! Your subscription is now active.",
+            [{ text: "OK" }]
+          );
+        } else {
+          Alert.alert("Error", "Payment verification failed. Please contact support.");
+        }
+        setLoading(false);
+      }
+    } catch (error: any) {
+      console.error("Error handling payment response:", error);
+      setShowPaymentWebView(false);
+      setLoading(false);
+      Alert.alert("Error", "Failed to process payment. Please try again.");
+    }
   };
 
   return (
@@ -109,16 +320,23 @@ const Subscription = () => {
                     <View style={styles.priceContainer}>
                       <View style={styles.priceRow}>
                         <Text style={styles.earlyBirdPrice}>
-                          {plan.earlyBirdPrice}
+                          ₹{plan.earlyBirdPrice.toLocaleString()}
                         </Text>
                         <Text style={styles.period}>/{plan.period}</Text>
+                        {plan.discount && (
+                          <View style={styles.discountBadge}>
+                            <Text style={styles.discountBadgeText}>
+                              {plan.discount}% OFF
+                            </Text>
+                          </View>
+                        )}
                       </View>
                       <View style={styles.regularPriceRow}>
                         <Text style={styles.regularPrice}>
-                          {plan.regularPrice}/{plan.period}
+                          From ₹{plan.regularPrice.toLocaleString()}
                         </Text>
                         <View style={styles.earlyBirdTag}>
-                          <Text style={styles.earlyBirdTagText}>Early Bird</Text>
+                          <Text style={styles.earlyBirdTagText}>Launching Offer</Text>
                         </View>
                       </View>
                     </View>
@@ -139,17 +357,23 @@ const Subscription = () => {
                     style={[
                       styles.subscribeButton,
                       plan.popular && styles.subscribeButtonPopular,
+                      loading && styles.subscribeButtonDisabled,
                     ]}
-                    onPress={() => handleSubscribe(plan.id)}
+                    onPress={() => handleSubscribe(plan)}
+                    disabled={loading}
                   >
-                    <Text
-                      style={[
-                        styles.subscribeButtonText,
-                        plan.popular && styles.subscribeButtonTextPopular,
-                      ]}
-                    >
-                      Get Started
-                    </Text>
+                    {loading ? (
+                      <ActivityIndicator color="#ffffff" />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.subscribeButtonText,
+                          plan.popular && styles.subscribeButtonTextPopular,
+                        ]}
+                      >
+                        Get Started
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -226,6 +450,44 @@ const Subscription = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Razorpay Payment WebView Modal */}
+      <Modal
+        visible={showPaymentWebView}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowPaymentWebView(false);
+          setLoading(false);
+        }}
+      >
+        <SafeAreaView style={styles.webViewContainer}>
+          <View style={styles.webViewHeader}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowPaymentWebView(false);
+                setLoading(false);
+              }}
+              style={styles.closeButton}
+            >
+              <Ionicons name="close" size={24} color="#1e293b" />
+            </TouchableOpacity>
+            <Text style={styles.webViewTitle}>Complete Payment</Text>
+            <View style={styles.placeholder} />
+          </View>
+          <WebView
+            source={{ html: paymentHtml }}
+            onMessage={handleWebViewMessage}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={styles.webViewLoading}>
+                <ActivityIndicator size="large" color="#6366f1" />
+              </View>
+            )}
+          />
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -410,6 +672,21 @@ const styles = StyleSheet.create({
   subscribeButtonTextPopular: {
     color: "#ffffff",
   },
+  subscribeButtonDisabled: {
+    opacity: 0.6,
+  },
+  discountBadge: {
+    backgroundColor: "#fbbf24",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  discountBadgeText: {
+    color: "#92400e",
+    fontSize: 11,
+    fontWeight: "700",
+  },
   benefitsCard: {
     backgroundColor: "#ffffff",
     borderRadius: 20,
@@ -575,6 +852,37 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#475569",
     textAlign: "center",
+  },
+  webViewContainer: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
+  webViewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
+  closeButton: {
+    padding: 8,
+  },
+  webViewTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  webViewLoading: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
   },
 });
 

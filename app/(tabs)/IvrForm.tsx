@@ -21,6 +21,9 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Linking from "expo-linking";
 import * as Clipboard from "expo-clipboard";
 import { API_BASE_URL } from "../../config/api";
+import { useSubscription } from "../../hooks/useSubscription";
+import { hasFeatureAccess, hasActiveSubscription } from "../../utils/subscription";
+import UpgradeModal from "../../Components/UpgradeModal";
 
 const IvrForm = () => {
   const [loading, setLoading] = useState(false);
@@ -29,6 +32,10 @@ const IvrForm = () => {
   const [success, setSuccess] = useState(false);
   const [existingRequest, setExistingRequest] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  
+  // Subscription
+  const { subscription } = useSubscription();
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -160,6 +167,13 @@ const IvrForm = () => {
 
   const handleSubmit = async () => {
     setError("");
+    
+    // Check subscription first
+    if (!hasActiveSubscription(subscription) || !hasFeatureAccess(subscription, "ivr-campaign")) {
+      setShowUpgradeModal(true);
+      return;
+    }
+    
     setLoading(true);
 
     // Check if user already has a pending or approved request
@@ -689,6 +703,14 @@ const IvrForm = () => {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        visible={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        isPremiumFeature={true}
+        featureName="IVR Campaign"
+      />
     </SafeAreaView>
   );
 };

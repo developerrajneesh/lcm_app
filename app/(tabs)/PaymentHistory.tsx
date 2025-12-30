@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   SafeAreaView,
   ScrollView,
@@ -8,10 +8,21 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
+import { API_BASE_URL } from "../../config/api";
 
 const PaymentHistory = () => {
   const [selectedFilter, setSelectedFilter] = useState("all");
+  const [payments, setPayments] = useState<any[]>([]);
+  const [summary, setSummary] = useState({ totalSpent: 0, thisMonthSpent: 0 });
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const filters = [
     { id: "all", label: "All" },
@@ -20,58 +31,73 @@ const PaymentHistory = () => {
     { id: "topup", label: "Top-up" },
   ];
 
-  const payments = [
-    {
-      id: 1,
-      type: "subscription",
-      amount: 599,
-      description: "Premium Subscription",
-      date: "Dec 10, 2024",
-      status: "completed",
-      method: "Credit Card",
-    },
-    {
-      id: 2,
-      type: "campaign",
-      amount: 250,
-      description: "Ad Campaign Payment",
-      date: "Dec 8, 2024",
-      status: "completed",
-      method: "Wallet",
-    },
-    {
-      id: 3,
-      type: "topup",
-      amount: 1000,
-      description: "Wallet Top-up",
-      date: "Dec 5, 2024",
-      status: "completed",
-      method: "UPI",
-    },
-    {
-      id: 4,
-      type: "subscription",
-      amount: 599,
-      description: "Premium Subscription",
-      date: "Nov 10, 2024",
-      status: "completed",
-      method: "Credit Card",
-    },
-    {
-      id: 5,
-      type: "campaign",
-      amount: 150,
-      description: "Ad Campaign Payment",
-      date: "Nov 28, 2024",
-      status: "failed",
-      method: "Wallet",
-    },
-  ];
+  useEffect(() => {
+    fetchPaymentHistory();
+  }, [selectedFilter]);
 
-  const filteredPayments =
-    selectedFilter === "all"
-      ? payments
-      : payments.filter((p) => p.type === selectedFilter);
+  const fetchPaymentHistory = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const authToken = await AsyncStorage.getItem("authToken");
+      const userData = await AsyncStorage.getItem("user");
+      
+      if (!userData) {
+        Alert.alert("Error", "Please login to view payment history");
+        router.back();
+        return;
+      }
+
+      const user = JSON.parse(userData);
+      const userId = user.id || user._id;
+
+      const config: any = {
+        params: {
+          userId: userId,
+          filter: selectedFilter,
+        },
+      };
+
+      if (authToken) {
+        config.headers = {
+          Authorization: `Bearer ${authToken}`,
+        };
+      }
+
+      const response = await axios.get(
+        `${API_BASE_URL}/subscription/payment-history`,
+        config
+      );
+
+      if (response.data.success) {
+        setPayments(response.data.data.payments || []);
+        setSummary(response.data.data.summary || { totalSpent: 0, thisMonthSpent: 0 });
+      } else {
+        throw new Error(response.data.message || "Failed to fetch payment history");
+      }
+    } catch (err: any) {
+      console.error("Error fetching payment history:", err);
+      setError(err.response?.data?.message || err.message || "Failed to load payment history");
+      Alert.alert("Error", err.response?.data?.message || err.message || "Failed to load payment history");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchPaymentHistory();
+  };
+
+  const formatAmount = (amount: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
 
   const getTypeIcon = (type: string) => {
     switch (type) {
@@ -101,16 +127,20 @@ const PaymentHistory = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#1e293b" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Payment History</Text>
-          <TouchableOpacity style={styles.filterButton}>
-            <Ionicons name="filter-outline" size={24} color="#1e293b" />
-          </TouchableOpacity>
+          <View style={styles.placeholder} />
         </View>
 
         {/* Filters */}
@@ -123,7 +153,9 @@ const PaymentHistory = () => {
                   styles.filterChip,
                   selectedFilter === filter.id && styles.filterChipActive,
                 ]}
-                onPress={() => setSelectedFilter(filter.id)}
+                onPress={() => {
+                  setSelectedFilter(filter.id);
+                }}
               >
                 <Text
                   style={[
@@ -142,19 +174,44 @@ const PaymentHistory = () => {
         <View style={styles.summaryCard}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>Total Spent</Text>
-            <Text style={styles.summaryValue}>₹2,598</Text>
+            <Text style={styles.summaryValue}>{formatAmount(summary.totalSpent)}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={styles.summaryLabel}>This Month</Text>
-            <Text style={styles.summaryValue}>₹849</Text>
+            <Text style={styles.summaryValue}>{formatAmount(summary.thisMonthSpent)}</Text>
           </View>
         </View>
 
         {/* Payments List */}
         <View style={styles.paymentsSection}>
           <Text style={styles.sectionTitle}>Recent Payments</Text>
-          {filteredPayments.map((payment) => (
+          
+          {loading && payments.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#6366f1" />
+              <Text style={styles.loadingText}>Loading payment history...</Text>
+            </View>
+          ) : error && payments.length === 0 ? (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle-outline" size={48} color="#ef4444" />
+              <Text style={styles.errorText}>{error}</Text>
+              <TouchableOpacity style={styles.retryButton} onPress={fetchPaymentHistory}>
+                <Text style={styles.retryButtonText}>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : payments.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="receipt-outline" size={64} color="#94a3b8" />
+              <Text style={styles.emptyText}>No payments found</Text>
+              <Text style={styles.emptySubtext}>
+                {selectedFilter === "all"
+                  ? "You haven't made any payments yet"
+                  : `No ${selectedFilter} payments found`}
+              </Text>
+            </View>
+          ) : (
+            payments.map((payment) => (
             <View key={payment.id} style={styles.paymentItem}>
               <View
                 style={[
@@ -182,7 +239,7 @@ const PaymentHistory = () => {
                     { color: payment.status === "failed" ? "#ef4444" : "#1e293b" },
                   ]}
                 >
-                  ₹{payment.amount}
+                  {formatAmount(payment.amount)}
                 </Text>
                 <View
                   style={[
@@ -206,14 +263,9 @@ const PaymentHistory = () => {
                 </View>
               </View>
             </View>
-          ))}
+            ))
+          )}
         </View>
-
-        {/* Download Receipt */}
-        <TouchableOpacity style={styles.downloadButton}>
-          <Ionicons name="download-outline" size={20} color="#6366f1" />
-          <Text style={styles.downloadButtonText}>Download All Receipts</Text>
-        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -244,8 +296,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1e293b",
   },
-  filterButton: {
-    padding: 8,
+  placeholder: {
+    width: 40,
   },
   filtersContainer: {
     paddingVertical: 16,
@@ -370,22 +422,55 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textTransform: "uppercase",
   },
-  downloadButton: {
-    flexDirection: "row",
+  loadingContainer: {
+    padding: 40,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
-    margin: 20,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: "#6366f1",
   },
-  downloadButtonText: {
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: "#64748b",
+  },
+  errorContainer: {
+    padding: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#ef4444",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: "#6366f1",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#ffffff",
     fontSize: 16,
     fontWeight: "600",
-    color: "#6366f1",
-    marginLeft: 8,
+  },
+  emptyContainer: {
+    padding: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  emptyText: {
+    marginTop: 16,
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  emptySubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: "#64748b",
+    textAlign: "center",
   },
 });
 

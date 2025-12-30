@@ -5,7 +5,6 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -27,17 +26,6 @@ export default function AdsScreen() {
   const [loading, setLoading] = useState(true);
   const [ads, setAds] = useState([]);
   const [adInsights, setAdInsights] = useState({});
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [creating, setCreating] = useState(false);
-
-  // Create Ad Form State
-  const [adForm, setAdForm] = useState({
-    name: "",
-    primaryText: "",
-    headline: "",
-    description: "",
-    link: "https://www.example.com",
-  });
 
   useEffect(() => {
     if (adsetId) {
@@ -112,12 +100,21 @@ export default function AdsScreen() {
       }
     } catch (error) {
       console.error("Error fetching ads:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.fb?.message ||
-          error.response?.data?.message ||
-          "Failed to fetch ads"
-      );
+      
+      // Check for token expiration
+      const { handleTokenExpiration } = require("../../utils/metaErrorHandler");
+      const wasTokenExpired = await handleTokenExpiration(error, () => {
+        router.replace("/MetaWorker");
+      });
+      
+      if (!wasTokenExpired) {
+        Alert.alert(
+          "Error",
+          error.response?.data?.fb?.message ||
+            error.response?.data?.message ||
+            "Failed to fetch ads"
+        );
+      }
       setAds([]);
     } finally {
       setLoading(false);
@@ -169,75 +166,6 @@ export default function AdsScreen() {
     }
   };
 
-  const handleCreateAd = async () => {
-    if (!adForm.name.trim()) {
-      Alert.alert("Error", "Please enter an ad name");
-      return;
-    }
-
-    setCreating(true);
-
-    try {
-      const accessToken = await AsyncStorage.getItem("fb_access_token");
-      if (!accessToken) {
-        Alert.alert("Error", "Please connect your Meta account first");
-        return;
-      }
-
-      const response = await axios.post(
-        `${API_BASE_URL}/ads`,
-        {
-          adsetId: adsetId,
-          name: adForm.name.trim(),
-          creative: {
-            object_story_spec: {
-              link_data: {
-                message: adForm.primaryText || "Check out our offer!",
-                link: adForm.link || "https://www.example.com",
-                name: adForm.headline || adForm.name,
-                description: adForm.description || "",
-                call_to_action: {
-                  type: "LEARN_MORE",
-                },
-              },
-            },
-          },
-          status: "PAUSED",
-        },
-        {
-          headers: {
-            "x-fb-access-token": accessToken,
-          },
-        }
-      );
-
-      if (response.data.success) {
-        Alert.alert("Success", "Ad created successfully!");
-        setShowCreateModal(false);
-        setAdForm({
-          name: "",
-          primaryText: "",
-          headline: "",
-          description: "",
-          link: "https://www.example.com",
-        });
-        fetchAds();
-      } else {
-        throw new Error(response.data.message || "Failed to create ad");
-      }
-    } catch (error) {
-      console.error("Error creating ad:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.fb?.message ||
-          error.response?.data?.message ||
-          error.message ||
-          "Failed to create ad. Please try again."
-      );
-    } finally {
-      setCreating(false);
-    }
-  };
 
   const filteredAds = ads.filter((ad) => {
     const matchesSearch = (ad.name || "")
@@ -402,7 +330,18 @@ export default function AdsScreen() {
         </View>
         <TouchableOpacity
           style={styles.createButton}
-          onPress={() => setShowCreateModal(true)}
+          onPress={() => {
+            router.push({
+              pathname: "/MetaAdsScreen",
+              params: {
+                step: "3",
+                adsetId: adsetId,
+                adsetName: adsetName || "",
+                campaignId: campaignId || "",
+                campaignName: campaignName || "",
+              },
+            });
+          }}
         >
           <Ionicons name="add" size={24} color="white" />
           <Text style={styles.createButtonText}>Create Ad</Text>
@@ -527,7 +466,18 @@ export default function AdsScreen() {
                 </Text>
                 <TouchableOpacity
                   style={styles.createFirstAdButton}
-                  onPress={() => setShowCreateModal(true)}
+                  onPress={() => {
+                    router.push({
+                      pathname: "/MetaAdsScreen",
+                      params: {
+                        step: "3",
+                        adsetId: adsetId,
+                        adsetName: adsetName || "",
+                        campaignId: campaignId || "",
+                        campaignName: campaignName || "",
+                      },
+                    });
+                  }}
                 >
                   <Text style={styles.createFirstAdButtonText}>
                     Create Your First Ad
@@ -539,112 +489,6 @@ export default function AdsScreen() {
         </>
       )}
 
-      {/* Create Ad Modal */}
-      <Modal
-        visible={showCreateModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowCreateModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create Ad</Text>
-              <TouchableOpacity
-                onPress={() => setShowCreateModal(false)}
-                style={styles.modalCloseButton}
-              >
-                <Ionicons name="close" size={24} color="#1e293b" />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              style={styles.modalContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Ad Name *</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="e.g., Summer Sale - Ad"
-                  value={adForm.name}
-                  onChangeText={(text) =>
-                    setAdForm({ ...adForm, name: text })
-                  }
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Primary Text</Text>
-                <TextInput
-                  style={[styles.formInput, styles.textArea]}
-                  placeholder="Main message for your ad"
-                  value={adForm.primaryText}
-                  onChangeText={(text) =>
-                    setAdForm({ ...adForm, primaryText: text })
-                  }
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Headline</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="Ad headline"
-                  value={adForm.headline}
-                  onChangeText={(text) =>
-                    setAdForm({ ...adForm, headline: text })
-                  }
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Description</Text>
-                <TextInput
-                  style={[styles.formInput, styles.textArea]}
-                  placeholder="Ad description"
-                  value={adForm.description}
-                  onChangeText={(text) =>
-                    setAdForm({ ...adForm, description: text })
-                  }
-                  multiline
-                  numberOfLines={2}
-                />
-              </View>
-
-              <View style={styles.formGroup}>
-                <Text style={styles.formLabel}>Link URL</Text>
-                <TextInput
-                  style={styles.formInput}
-                  placeholder="https://www.example.com"
-                  value={adForm.link}
-                  onChangeText={(text) =>
-                    setAdForm({ ...adForm, link: text })
-                  }
-                  keyboardType="url"
-                />
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.submitButton,
-                  creating && styles.submitButtonDisabled,
-                ]}
-                onPress={handleCreateAd}
-                disabled={creating}
-              >
-                {creating ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : (
-                  <Text style={styles.submitButtonText}>Create Ad</Text>
-                )}
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }

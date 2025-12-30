@@ -18,12 +18,19 @@ import {
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 const CARD_WIDTH = (SCREEN_WIDTH - 40) / 2 - 10; // 2 columns with spacing
 import { API_BASE_URL } from "../../config/api";
+import { useSubscription } from "../../hooks/useSubscription";
+import { hasFeatureAccess, hasActiveSubscription } from "../../utils/subscription";
+import UpgradeModal from "../../Components/UpgradeModal";
 
 const MyCreatives = () => {
   const [workshops, setWorkshops] = useState([]);
   const [groupedSections, setGroupedSections] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  
+  // Subscription
+  const { subscription } = useSubscription();
 
   useEffect(() => {
     fetchWorkshops();
@@ -77,6 +84,24 @@ const MyCreatives = () => {
   };
 
   const handleWorkshopPress = (id) => {
+    console.log("🔍 Creatives: Workshop clicked, checking subscription");
+    console.log("  - Subscription:", subscription ? "exists" : "null/undefined");
+    
+    // Check subscription before navigating
+    const hasActive = hasActiveSubscription(subscription);
+    const hasAccess = hasFeatureAccess(subscription, "creative-workshop");
+    
+    console.log("  - Has active subscription:", hasActive);
+    console.log("  - Has feature access:", hasAccess);
+    
+    // Show upgrade modal if no subscription or no access
+    if (!hasActive || !hasAccess) {
+      console.log("❌ Creatives: Subscription check failed - showing upgrade modal");
+      setShowUpgradeModal(true);
+      return; // Block navigation
+    }
+    
+    console.log("✅ Creatives: Subscription check passed - navigating to workshop");
     router.push({
       pathname: "/CreativeWorkShop",
       params: { id },
@@ -182,6 +207,17 @@ const MyCreatives = () => {
           ))}
         </ScrollView>
       )}
+
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        visible={showUpgradeModal}
+        onClose={() => {
+          console.log("🔒 Creatives: Upgrade modal closed");
+          setShowUpgradeModal(false);
+        }}
+        isPremiumFeature={false}
+        featureName="Creative Workshop"
+      />
     </View>
   );
 };

@@ -52,7 +52,6 @@ const Referrals = () => {
         }
         
         fetchReferrals();
-        fetchTotalEarnings();
         
         // Check if user needs referral code assignment
         const userId = currentUser.id || currentUser._id;
@@ -193,32 +192,25 @@ const Referrals = () => {
     if (!user?.id) return;
 
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/wallet/${user.id}/transactions`,
-        {
-          params: {
-            page: 1,
-            limit: 100,
-          },
-        }
-      );
-
-      if (response.data.success) {
-        const referralTransactions = (response.data.data.transactions || []).filter(
-          (t: any) => t.description?.includes("Referral bonus") && t.type === "credit"
-        );
-        const total = referralTransactions.reduce((sum: number, t: any) => sum + t.amount, 0);
-        setTotalEarnings(total);
-      }
+      // Calculate earnings from referrals with successful payments
+      const successfulReferrals = referrals.filter((r: any) => r.paymentStatus === "success");
+      const total = successfulReferrals.reduce((sum: number, r: any) => sum + (r.rewardEarned || 0), 0);
+      setTotalEarnings(total);
     } catch (error) {
       console.error("Error fetching earnings:", error);
     }
   };
 
+  useEffect(() => {
+    if (referrals.length > 0) {
+      fetchTotalEarnings();
+    }
+  }, [referrals]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     if (user) {
-      await Promise.all([fetchReferrals(), fetchTotalEarnings()]);
+      await fetchReferrals();
     }
     setRefreshing(false);
   }, [user]);
@@ -383,7 +375,7 @@ const Referrals = () => {
             <View style={styles.stepContent}>
               <Text style={styles.stepTitle}>You Earn ₹50</Text>
               <Text style={styles.stepDescription}>
-                ₹50 is automatically credited to your wallet
+                ₹50 is automatically credited to your wallet when they make their first payment
               </Text>
             </View>
           </View>
@@ -423,10 +415,18 @@ const Referrals = () => {
                   </Text>
                 </View>
                 <View style={styles.referralEarnings}>
-                  <View style={[styles.statusBadge, { backgroundColor: "#dcfce7" }]}>
-                    <Text style={[styles.statusText, { color: "#22c55e" }]}>Active</Text>
-                  </View>
-                  <Text style={styles.earningsText}>₹50</Text>
+                  {referral.paymentStatus === "success" ? (
+                    <View style={[styles.statusBadge, { backgroundColor: "#dcfce7" }]}>
+                      <Text style={[styles.statusText, { color: "#22c55e" }]}>Payment Success</Text>
+                    </View>
+                  ) : (
+                    <View style={[styles.statusBadge, { backgroundColor: "#fef3c7" }]}>
+                      <Text style={[styles.statusText, { color: "#f59e0b" }]}>Payment Pending</Text>
+                    </View>
+                  )}
+                  <Text style={[styles.earningsText, { color: referral.rewardEarned > 0 ? "#22c55e" : "#94a3b8" }]}>
+                    ₹{referral.rewardEarned || 0}
+                  </Text>
                 </View>
               </View>
             ))
@@ -438,7 +438,7 @@ const Referrals = () => {
           <Text style={styles.sectionTitle}>Benefits</Text>
           <View style={styles.benefitItem}>
             <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-            <Text style={styles.benefitText}>Earn ₹50 for each successful referral</Text>
+            <Text style={styles.benefitText}>Earn ₹50 when your referral makes their first payment</Text>
           </View>
           <View style={styles.benefitItem}>
             <Ionicons name="checkmark-circle" size={24} color="#22c55e" />

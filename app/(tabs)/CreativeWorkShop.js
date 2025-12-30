@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import * as FileSystem from "expo-file-system/legacy";
 import * as MediaLibrary from "expo-media-library";
 import { StatusBar } from "expo-status-bar";
+import { captureRef } from "react-native-view-shot";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { API_BASE_URL } from "../../config/api";
 
@@ -28,6 +30,32 @@ export default function WorkshopScreen() {
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
   const [imageDimensions, setImageDimensions] = useState({});
+  const imageRefs = useRef({});
+  const [userData, setUserData] = useState({ username: "User", usernumber: "", userLogo: null });
+
+  // Fetch user data for placeholders
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const userDataStr = await AsyncStorage.getItem("user");
+        if (userDataStr) {
+          const user = JSON.parse(userDataStr);
+          const loadedUserData = {
+            username: user.name || "User",
+            usernumber: user.phoneNumber || "",
+            userLogo: user.profileImage || null,
+          };
+          console.log("Loaded user data for placeholders:", loadedUserData);
+          setUserData(loadedUserData);
+        } else {
+          console.warn("No user data found in AsyncStorage");
+        }
+      } catch (error) {
+        console.error("Error loading user data:", error);
+      }
+    };
+    loadUserData();
+  }, []);
 
   // Fetch image-text data
   useEffect(() => {
@@ -47,7 +75,25 @@ export default function WorkshopScreen() {
       const response = await axios.get(`${API_BASE_URL}/image-texts/${workshopId}`);
 
       if (response.data.success && response.data.data) {
-        setData(response.data.data);
+        // Normalize borderWidth values - ensure 0 or undefined becomes 0, and remove borderColor if borderWidth is 0
+        const normalizedData = {
+          ...response.data.data,
+          images: response.data.data.images?.map((img) => ({
+            ...img,
+            texts: img.texts?.map((txt) => {
+              // BORDER FEATURE COMPLETELY REMOVED - Remove all border properties from data
+              const normalizedText = { ...txt };
+              
+              // Completely remove all border-related properties
+              delete normalizedText.borderWidth;
+              delete normalizedText.borderColor;
+              delete normalizedText.borderStyle;
+              
+              return normalizedText;
+            }),
+          })),
+        };
+        setData(normalizedData);
       } else {
         throw new Error("Invalid data format");
       }
@@ -102,6 +148,40 @@ export default function WorkshopScreen() {
     return originalFontSize * scaleFactor;
   };
 
+  // Get user data for placeholder replacement
+  const getUserData = async () => {
+    try {
+      const userData = await AsyncStorage.getItem("user");
+      if (userData) {
+        const user = JSON.parse(userData);
+        return {
+          username: user.name || "User",
+          usernumber: user.phoneNumber || "",
+          userLogo: user.profileImage || null,
+        };
+      }
+    } catch (error) {
+      console.error("Error loading user data:", error);
+    }
+    return {
+      username: "User",
+      usernumber: "",
+      userLogo: null,
+    };
+  };
+
+  // Replace placeholders in text with user data
+  const replacePlaceholders = (text, userData) => {
+    if (!text) return text;
+    let replaced = text;
+    replaced = replaced.replace(/\{\{username\}\}/g, userData.username);
+    replaced = replaced.replace(/\{\{usernumber\}\}/g, userData.usernumber);
+    // Note: {{userLogo}} in text will be replaced with empty string
+    // For image elements, we'll handle it separately
+    replaced = replaced.replace(/\{\{userLogo\}\}/g, "");
+    return replaced;
+  };
+
   // Download image with text overlays
   const handleDownload = async () => {
     if (!data || !data.images || data.images.length === 0) {
@@ -112,6 +192,9 @@ export default function WorkshopScreen() {
     setDownloading(true);
 
     try {
+      // Get user data for placeholder replacement
+      const userData = await getUserData();
+
       // Request media library permissions
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== "granted") {
@@ -120,38 +203,86 @@ export default function WorkshopScreen() {
         return;
       }
 
-      // Download all images
+      // Download all images with text overlays
       for (let i = 0; i < data.images.length; i++) {
         const imageData = data.images[i];
-        const imageUrl = imageData.imageUrl || imageData.imageBase64;
+        const imageRef = imageRefs.current[`image-${i}`];
+        
+        if (!imageRef) {
+          console.warn(`Image ref not found for image ${i}, trying fallback...`);
+          // Fallback: download original image without text overlays
+          const imageUrl = imageData.imageUrl || imageData.imageBase64;
+          const extension = imageData.mimeType?.includes("png") ? "png" : "jpg";
+          const fileName = `workshop-${data.id}-${i + 1}-${Date.now()}.${extension}`;
+          const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+          
+          if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+            const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+            if (downloadResult.uri) {
+              const asset = await MediaLibrary.createAssetAsync(fileUri);
+              await MediaLibrary.createAlbumAsync("Workshop", asset, false);
+            }
+          } else {
+            const base64String = imageUrl;
+            const base64Data = base64String.includes(",")
+              ? base64String.split(",")[1]
+              : base64String;
+            await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+              encoding: "base64",
+            });
+            const asset = await MediaLibrary.createAssetAsync(fileUri);
+            await MediaLibrary.createAlbumAsync("Workshop", asset, false);
+          }
+          continue;
+        }
 
         // Create a file name
         const extension = imageData.mimeType?.includes("png") ? "png" : "jpg";
         const fileName = `workshop-${data.id}-${i + 1}-${Date.now()}.${extension}`;
         const fileUri = `${FileSystem.documentDirectory}${fileName}`;
 
-        // If it's a URL (S3), download it
-        if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
-          const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
-          if (!downloadResult.uri) {
-            throw new Error("Failed to download image from URL");
-          }
-        } else {
-          // Handle base64 (backward compatibility)
-          const base64String = imageUrl;
-          const base64Data = base64String.includes(",")
-            ? base64String.split(",")[1]
-            : base64String;
-
-          // Write base64 to file
-          await FileSystem.writeAsStringAsync(fileUri, base64Data, {
-            encoding: "base64",
+        // Wait a bit to ensure the view is fully rendered
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Capture the view with text overlays
+        try {
+          const uri = await captureRef(imageRef, {
+            format: extension === "png" ? "png" : "jpg",
+            quality: 1.0,
+            result: "tmpfile",
           });
-        }
 
-        // Save to media library
-        const asset = await MediaLibrary.createAssetAsync(fileUri);
-        await MediaLibrary.createAlbumAsync("Workshop", asset, false);
+          // Copy the captured file to our desired location
+          await FileSystem.copyAsync({
+            from: uri,
+            to: fileUri,
+          });
+
+          // Save to media library
+          const asset = await MediaLibrary.createAssetAsync(fileUri);
+          await MediaLibrary.createAlbumAsync("Workshop", asset, false);
+        } catch (captureError) {
+          console.error(`Error capturing image ${i}:`, captureError);
+          // Fallback: download original image without text overlays
+          const imageUrl = imageData.imageUrl || imageData.imageBase64;
+          if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
+            const downloadResult = await FileSystem.downloadAsync(imageUrl, fileUri);
+            if (downloadResult.uri) {
+              const asset = await MediaLibrary.createAssetAsync(fileUri);
+              await MediaLibrary.createAlbumAsync("Workshop", asset, false);
+            }
+          } else {
+            const base64String = imageUrl;
+            const base64Data = base64String.includes(",")
+              ? base64String.split(",")[1]
+              : base64String;
+            await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+              encoding: "base64",
+            });
+            const asset = await MediaLibrary.createAssetAsync(fileUri);
+            await MediaLibrary.createAlbumAsync("Workshop", asset, false);
+          }
+        }
       }
 
       Alert.alert(
@@ -159,6 +290,7 @@ export default function WorkshopScreen() {
         `${data.images.length} ${data.images.length === 1 ? "image" : "images"} saved to gallery!`
       );
     } catch (err) {
+      console.error("Download error:", err);
       Alert.alert("Error", err.message || "Failed to download image");
     } finally {
       setDownloading(false);
@@ -224,6 +356,9 @@ export default function WorkshopScreen() {
               return (
                 <View key={imageIndex} style={styles.imageWrapper}>
                   <View
+                    ref={(ref) => {
+                      imageRefs.current[`image-${imageIndex}`] = ref;
+                    }}
                     style={[
                       styles.imageContainer,
                       {
@@ -255,13 +390,7 @@ export default function WorkshopScreen() {
                         const absoluteX = text.x * containerWidth;
                         const absoluteY = text.y * containerHeight;
 
-                        // Build style object conditionally - only add border if borderWidth > 0
-                        // Parse borderWidth as number and default to 0 if not set
-                        const borderWidth = text.borderWidth !== undefined && text.borderWidth !== null 
-                          ? (typeof text.borderWidth === 'number' ? text.borderWidth : parseInt(text.borderWidth) || 0)
-                          : 0;
-                        const hasBorder = borderWidth > 0;
-                        
+                        // BORDER FEATURE COMPLETELY REMOVED - No border properties will be added
                         const textStyle = {
                           left: absoluteX,
                           top: absoluteY,
@@ -273,16 +402,55 @@ export default function WorkshopScreen() {
                           fontStyle: text.italic ? "italic" : "normal",
                           padding: 4,
                           borderRadius: text.borderRadius || 0,
+                          // NO border properties - borders are completely disabled
                         };
 
-                        // Only add borderWidth and borderColor if borderWidth > 0
-                        // React Native will not show border if borderWidth is 0 or not set
-                        if (hasBorder) {
-                          textStyle.borderWidth = borderWidth;
-                          textStyle.borderColor = text.borderColor || "#000000";
-                        } else {
-                          // Explicitly set borderWidth to 0 to ensure no border is rendered
-                          textStyle.borderWidth = 0;
+                        // Get original text
+                        const originalText = text.text || "";
+                        
+                        // Handle {{userLogo}} - if text is exactly {{userLogo}}, render image instead
+                        if (originalText.trim() === "{{userLogo}}") {
+                          if (userData.userLogo) {
+                            return (
+                              <Image
+                                key={textIndex}
+                                source={{ uri: userData.userLogo }}
+                                style={[
+                                  styles.textOverlay,
+                                  textStyle,
+                                  {
+                                    width: scaledFontSize * 2,
+                                    height: scaledFontSize * 2,
+                                    borderRadius: text.borderRadius || scaledFontSize,
+                                  },
+                                ]}
+                                resizeMode="cover"
+                              />
+                            );
+                          } else {
+                            // No user logo, don't render anything
+                            return null;
+                          }
+                        }
+                        
+                        // Replace placeholders in text - ensure we have user data
+                        let displayText = originalText;
+                        const username = userData.username || "User";
+                        const usernumber = userData.usernumber || "";
+                        
+                        // Replace placeholders
+                        displayText = displayText.replace(/\{\{username\}\}/g, username);
+                        displayText = displayText.replace(/\{\{usernumber\}\}/g, usernumber);
+                        // Remove {{userLogo}} from text if it's mixed with other text
+                        displayText = displayText.replace(/\{\{userLogo\}\}/g, "");
+                        
+                        // Debug log to verify replacement
+                        if (originalText.includes("{{username}}") || originalText.includes("{{usernumber}}") || originalText.includes("{{userLogo}}")) {
+                          console.log("Placeholder replacement:", {
+                            original: originalText,
+                            replaced: displayText,
+                            userData: { username, usernumber, hasLogo: !!userData.userLogo }
+                          });
                         }
 
                         return (
@@ -290,7 +458,7 @@ export default function WorkshopScreen() {
                             key={textIndex}
                             style={[styles.textOverlay, textStyle]}
                           >
-                            {text.text}
+                            {displayText}
                           </Text>
                         );
                       })}

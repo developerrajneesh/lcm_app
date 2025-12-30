@@ -13,6 +13,7 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { WebView } from "react-native-webview";
+import NotificationBadge from "../../Components/NotificationBadge";
 
 // Try to import YoutubePlayer, but handle if it fails
 let YoutubePlayer = null;
@@ -30,6 +31,7 @@ const HomeScreen = () => {
   const [userName, setUserName] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [userId, setUserId] = useState(null);
 
   // Check if user is logged in and get user name
   useFocusEffect(
@@ -42,9 +44,11 @@ const HomeScreen = () => {
           if (userData && authToken) {
             const user = JSON.parse(userData);
             setUserName(user.name || null);
+            setUserId(user.id || user._id || null);
             setIsLoggedIn(true);
           } else {
             setUserName(null);
+            setUserId(null);
             setIsLoggedIn(false);
           }
         } catch (error) {
@@ -124,15 +128,6 @@ const HomeScreen = () => {
     },
     {
       id: 3,
-      title: "Wallet",
-      subtitle: "₹12,450.50",
-      icon: "wallet",
-      color: "#f59e0b",
-      bgColor: "#fef3c7",
-      route: "/Wallet",
-    },
-    {
-      id: 4,
       title: "Referrals",
       subtitle: "Earn rewards",
       icon: "gift",
@@ -196,12 +191,9 @@ const HomeScreen = () => {
           )}
           <Text style={styles.welcomeSubtext}>Ready to grow your business today?</Text>
         </View>
-        <View style={styles.notificationBadge}>
-          <Ionicons name="notifications" size={24} color="#6366f1" />
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>3</Text>
-          </View>
-        </View>
+        {isLoggedIn && userId && (
+          <NotificationBadge userId={userId} iconSize={24} iconColor="#6366f1" />
+        )}
       </View>
 
       {/* Video Section - How to use Our App */}
@@ -457,28 +449,6 @@ const styles = StyleSheet.create({
   welcomeSubtext: {
     fontSize: 14,
     color: "#94a3b8",
-  },
-  notificationBadge: {
-    position: "relative",
-    padding: 8,
-  },
-  badge: {
-    position: "absolute",
-    top: 4,
-    right: 4,
-    backgroundColor: "#ef4444",
-    borderRadius: 10,
-    width: 18,
-    height: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 2,
-    borderColor: "#ffffff",
-  },
-  badgeText: {
-    color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "700",
   },
   statsContainer: {
     flexDirection: "row",
