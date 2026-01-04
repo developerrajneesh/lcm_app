@@ -39,9 +39,23 @@ export const useSubscription = () => {
         config
       );
 
+      console.log("📡 useSubscription: API Response:", {
+        success: response.data.success,
+        hasData: !!response.data.data,
+        data: response.data.data,
+      });
+
       if (response.data.success && response.data.data) {
-        setSubscription(response.data.data);
+        const subscriptionData = response.data.data;
+        console.log("✅ useSubscription: Setting subscription:", {
+          planId: subscriptionData.planId,
+          planName: subscriptionData.planName,
+          status: subscriptionData.subscriptionStatus,
+          endDate: subscriptionData.endDate,
+        });
+        setSubscription(subscriptionData);
       } else {
+        console.log("❌ useSubscription: No subscription data found");
         setSubscription(null);
       }
     } catch (err) {
@@ -57,9 +71,10 @@ export const useSubscription = () => {
     fetchSubscription();
   }, [fetchSubscription]);
 
-  const refreshSubscription = () => {
+  // Memoize refreshSubscription to prevent infinite loops
+  const refreshSubscription = useCallback(() => {
     fetchSubscription();
-  };
+  }, [fetchSubscription]);
 
   return {
     subscription,

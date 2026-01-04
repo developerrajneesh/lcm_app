@@ -4,8 +4,8 @@ import {
   Ionicons,
   MaterialIcons,
 } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { useState, useEffect } from "react";
+import { router, useFocusEffect } from "expo-router";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Alert,
   Animated,
@@ -43,19 +43,58 @@ const MarketingOptionsScreen = () => {
   const [upgradeFeatureName, setUpgradeFeatureName] = useState("");
   
   // Subscription
-  const { subscription, loading: subscriptionLoading } = useSubscription();
+  const { subscription, loading: subscriptionLoading, refreshSubscription } = useSubscription();
 
-  // Debug subscription state changes
+  // Use a ref to store the latest refreshSubscription function and prevent multiple simultaneous refreshes
+  const refreshSubscriptionRef = useRef(refreshSubscription);
+  const isRefreshingRef = useRef(false);
+  
+  // Update ref when refreshSubscription changes
+  useEffect(() => {
+    refreshSubscriptionRef.current = refreshSubscription;
+  }, [refreshSubscription]);
+
+  // Refresh subscription when screen comes into focus (e.g., after subscription payment)
+  useFocusEffect(
+    useCallback(() => {
+      // Prevent multiple simultaneous refreshes
+      if (isRefreshingRef.current) {
+        return;
+      }
+      
+      isRefreshingRef.current = true;
+      console.log("🔄 Marketing: Screen focused - refreshing subscription");
+      refreshSubscriptionRef.current();
+      
+      // Reset ref after a short delay
+      setTimeout(() => {
+        isRefreshingRef.current = false;
+      }, 1000);
+    }, []) // Empty dependency array - only run on focus
+  );
+
+  // Debug subscription state changes and auto-hide modal when subscription becomes active
   useEffect(() => {
     console.log("📊 Marketing: Subscription state changed");
     console.log("  - Loading:", subscriptionLoading);
-    console.log("  - Subscription:", subscription ? JSON.stringify(subscription, null, 2) : "null/undefined");
+    console.log("  - Subscription:", subscription ? JSON.stringify(subscription, null, 2) : "null");
     if (subscription) {
       console.log("  - Plan ID:", subscription.planId);
       console.log("  - Status:", subscription.subscriptionStatus);
       console.log("  - End Date:", subscription.endDate);
+      
+      // Auto-hide upgrade modal if subscription becomes active
+      if (!subscriptionLoading && hasActiveSubscription(subscription)) {
+        const featureToCheck = upgradeFeatureName === "IVR Call marketing" ? "ivr-campaign" : "meta-ads";
+        const hasAccess = hasFeatureAccess(subscription, featureToCheck);
+        
+        if (hasAccess) {
+          console.log("✅ Marketing: Subscription is now active - hiding upgrade modal");
+          setShowUpgradeModal(false);
+        }
+      }
     }
-  }, [subscription, subscriptionLoading]);
+  }, [subscription, subscriptionLoading, upgradeFeatureName]);
 
   // Check token on component mount for debugging
   useEffect(() => {
@@ -133,9 +172,7 @@ const MarketingOptionsScreen = () => {
       gradient: ["#8E44AD", "#6C3483"],
       stats: { engagement: "95%", roi: "3.2x", time: "1h" },
       route: null,
-      comingSoon: false,
-      requiredFeature: "sms-marketing",
-      isPremium: true,
+      comingSoon: true,
     },
     {
       id: 6,
@@ -164,8 +201,23 @@ const MarketingOptionsScreen = () => {
     
     if (needsSubscriptionCheck) {
       console.log("🔍 Marketing: Checking subscription for", option.title, "(ID:", option.id, ")");
-      console.log("  - Subscription:", subscription ? JSON.stringify(subscription) : "null/undefined");
+      console.log("  - Subscription loading:", subscriptionLoading);
+      console.log("  - Subscription:", subscription ? JSON.stringify(subscription, null, 2) : "null");
       console.log("  - Required feature:", option.requiredFeature || "meta-ads");
+      
+      // Wait for subscription to finish loading before checking
+      if (subscriptionLoading) {
+        console.log("⏳ Marketing: Subscription still loading, waiting...");
+        // Wait for subscription to load, then proceed
+        const checkSubscription = setInterval(() => {
+          if (!subscriptionLoading) {
+            clearInterval(checkSubscription);
+            // Retry the action after subscription loads
+            setTimeout(() => handleOptionPress(option), 100);
+          }
+        }, 100);
+        return;
+      }
       
       // Check if user has active subscription and feature access
       const hasActive = hasActiveSubscription(subscription);
@@ -693,14 +745,51 @@ const MarketingOptionsScreen = () => {
         </View>
       </Modal>
 
+      {/* Loading Overlay */}
+      <Modal
+        visible={subscriptionLoading}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingModalContainer}>
+            <ActivityIndicator size="large" color="#6366f1" />
+            <Text style={styles.loadingModalText}>Checking subscription...</Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Loading Overlay */}
+      <Modal
+        visible={subscriptionLoading}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingModalContainer}>
+            <ActivityIndicator size="large" color="#6366f1" />
+            <Text style={styles.loadingModalText}>Checking subscription...</Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* Upgrade Modal */}
       <UpgradeModal
         visible={showUpgradeModal}
-        onClose={() => {
+        onClose={async () => {
           console.log("🔒 Marketing: Upgrade modal closed");
           setShowUpgradeModal(false);
+          
+          // Refresh subscription when modal closes (in case user just made payment)
+          console.log("🔄 Marketing: Refreshing subscription after modal close");
+          await refreshSubscription();
+          
+          // Wait a moment for subscription state to update
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          console.log("✅ Marketing: Subscription refreshed - user can now access features");
         }}
-        isPremiumFeature={upgradeFeatureName === "IVR Call marketing" || upgradeFeatureName === "SMS Marketing"}
+        isPremiumFeature={upgradeFeatureName === "IVR Call marketing"}
         featureName={upgradeFeatureName || "Meta Ads"}
       />
     </SafeAreaView>
@@ -1031,6 +1120,25 @@ const styles = StyleSheet.create({
   accountCurrency: {
     fontSize: 12,
     color: "#666",
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingModalContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    minWidth: 200,
+  },
+  loadingModalText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#1e293b",
+    fontWeight: "500",
   },
 });
 

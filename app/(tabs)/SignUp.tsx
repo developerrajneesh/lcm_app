@@ -338,7 +338,7 @@ const SignUpScreen = () => {
                   />
                 </View>
                 <Text style={styles.hintText}>
-                  Enter a referral code to help someone earn ₹50
+                  Enter a referral code to help someone earn ₹101
                 </Text>
               </View>
 

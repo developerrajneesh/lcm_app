@@ -373,9 +373,9 @@ const Referrals = () => {
               <Text style={styles.stepNumberText}>3</Text>
             </View>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>You Earn ₹50</Text>
+              <Text style={styles.stepTitle}>You Earn ₹101</Text>
               <Text style={styles.stepDescription}>
-                ₹50 is automatically credited to your wallet when they make their first payment
+                ₹101 is automatically credited to your wallet when they make their first payment
               </Text>
             </View>
           </View>
@@ -438,7 +438,7 @@ const Referrals = () => {
           <Text style={styles.sectionTitle}>Benefits</Text>
           <View style={styles.benefitItem}>
             <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-            <Text style={styles.benefitText}>Earn ₹50 when your referral makes their first payment</Text>
+            <Text style={styles.benefitText}>Earn ₹101 when your referral makes their first payment</Text>
           </View>
           <View style={styles.benefitItem}>
             <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
@@ -511,21 +511,22 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
   earningsCard: {
-    flexDirection: "row",
+    flexDirection: "column",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "center",
     padding: 16,
   },
   earningsValue: {
     fontSize: 24,
     fontWeight: "700",
     color: "#1e293b",
-    marginLeft: 12,
-    marginRight: 8,
+    marginTop: 8,
+    marginBottom: 4,
   },
   earningsLabel: {
     fontSize: 14,
     color: "#64748b",
+    marginTop: 4,
   },
   referralCard: {
     backgroundColor: "#ffffff",

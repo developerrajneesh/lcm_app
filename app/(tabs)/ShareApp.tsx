@@ -138,11 +138,11 @@ const ShareApp = () => {
           <Text style={styles.sectionTitle}>Benefits</Text>
           <View style={styles.benefitItem}>
             <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-            <Text style={styles.benefitText}>Earn ₹100 for each successful referral</Text>
+            <Text style={styles.benefitText}>Earn ₹101 for each successful referral</Text>
           </View>
           <View style={styles.benefitItem}>
             <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
-            <Text style={styles.benefitText}>Your friend gets ₹50 bonus on signup</Text>
+            <Text style={styles.benefitText}>Your friend gets ₹101 bonus on signup</Text>
           </View>
           <View style={styles.benefitItem}>
             <Ionicons name="checkmark-circle" size={24} color="#22c55e" />

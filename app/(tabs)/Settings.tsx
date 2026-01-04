@@ -33,17 +33,19 @@ const SettingsScreen = () => {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   
   // Subscription
-  const { subscription } = useSubscription();
+  const { subscription, refreshSubscription } = useSubscription();
 
   useEffect(() => {
     checkAuthStatus();
   }, []);
 
-  // Refresh auth status when screen comes into focus
+  // Refresh auth status and subscription when screen comes into focus
   useFocusEffect(
     useCallback(() => {
+      console.log("🔄 Settings: Screen focused - refreshing subscription");
+      refreshSubscription();
       checkAuthStatus();
-    }, [])
+    }, [refreshSubscription])
   );
 
   const checkAuthStatus = async () => {
@@ -333,9 +335,18 @@ const SettingsScreen = () => {
       {/* Upgrade Modal */}
       <UpgradeModal
         visible={showUpgradeModal}
-        onClose={() => {
+        onClose={async () => {
           console.log("🔒 Settings: Upgrade modal closed");
           setShowUpgradeModal(false);
+          
+          // Refresh subscription when modal closes (in case user just made payment)
+          console.log("🔄 Settings: Refreshing subscription after modal close");
+          await refreshSubscription();
+          
+          // Wait a moment for subscription state to update
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          console.log("✅ Settings: Subscription refreshed - user can now access features");
         }}
         isPremiumFeature={false}
         featureName="Live Chat Support"

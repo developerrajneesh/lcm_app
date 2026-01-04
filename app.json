@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Lcm",
+    "name": "LCM",
     "slug": "Lcm",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -27,7 +27,10 @@
               "host": "authredirect"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -41,7 +44,7 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/LCMLOGO.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useState, useEffect, useRef } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -13,6 +13,9 @@ import {
   TouchableOpacity,
   View,
   ActivityIndicator,
+  Keyboard,
+  Dimensions,
+  Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
@@ -24,7 +27,19 @@ import UpgradeModal from "../../Components/UpgradeModal";
 
 interface Message {
   _id?: string;
+  senderId?: string | {
+    _id: string;
+    name: string;
+    email: string;
+    profileImage?: string;
+  };
   sender?: {
+    _id: string;
+    name: string;
+    email: string;
+    profileImage?: string;
+  };
+  receiverId?: string | {
     _id: string;
     name: string;
     email: string;
@@ -51,11 +66,40 @@ const LiveChat = () => {
   const [adminInfo, setAdminInfo] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const messagesEndRef = useRef<ScrollView>(null);
   const pendingMessagesRef = useRef(new Map<string, number>());
   
-  // Subscription
-  const { subscription } = useSubscription();
+  // Subscription - get refresh function to manually refresh after payment
+  const { subscription, refreshSubscription, loading: subscriptionLoading } = useSubscription();
+
+  // Use a ref to store the latest refreshSubscription function and prevent multiple simultaneous refreshes
+  const refreshSubscriptionRef = useRef(refreshSubscription);
+  const isRefreshingRef = useRef(false);
+  
+  // Update ref when refreshSubscription changes
+  useEffect(() => {
+    refreshSubscriptionRef.current = refreshSubscription;
+  }, [refreshSubscription]);
+
+  // Refresh subscription when screen comes into focus (e.g., after payment)
+  useFocusEffect(
+    useCallback(() => {
+      // Prevent multiple simultaneous refreshes
+      if (isRefreshingRef.current) {
+        return;
+      }
+      
+      isRefreshingRef.current = true;
+      console.log("🔍 LiveChat: Screen focused - refreshing subscription");
+      refreshSubscriptionRef.current();
+      
+      // Reset ref after a short delay
+      setTimeout(() => {
+        isRefreshingRef.current = false;
+      }, 1000);
+    }, []) // Empty dependency array - only run on focus
+  );
 
   useEffect(() => {
     loadUserData();
@@ -77,12 +121,56 @@ const LiveChat = () => {
     }
   };
 
+  // Helper function to fetch subscription for check
+  const fetchSubscriptionForCheck = async () => {
+    try {
+      const userData = await AsyncStorage.getItem("user");
+      const authToken = await AsyncStorage.getItem("authToken");
+      
+      if (!userData) return null;
+      
+      const user = JSON.parse(userData);
+      const userId = user.id || user._id;
+      
+      const config: any = {
+        params: { userId },
+      };
+      
+      if (authToken) {
+        config.headers = {
+          Authorization: `Bearer ${authToken}`,
+        };
+      }
+      
+      const response = await axios.get(
+        `${API_BASE_URL}/subscription/active-subscription`,
+        config
+      );
+      
+      if (response.data.success && response.data.data) {
+        return response.data.data;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error fetching subscription:", error);
+      return null;
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
 
+    // Wait for subscription to finish loading before checking
+    // This prevents false negatives when subscription is still loading
+    if (subscriptionLoading) {
+      console.log("⏳ LiveChat: Waiting for subscription to load...");
+      return;
+    }
+
     // Check subscription before initializing socket
     console.log("🔍 LiveChat: Checking subscription");
-    console.log("  - Subscription:", subscription ? "exists" : "null/undefined");
+    console.log("  - Loading:", subscriptionLoading);
+    console.log("  - Subscription:", subscription ? JSON.stringify(subscription, null, 2) : "null");
     
     const hasActive = hasActiveSubscription(subscription);
     console.log("  - Has active subscription:", hasActive);
@@ -91,10 +179,30 @@ const LiveChat = () => {
       console.log("❌ LiveChat: No active subscription - showing upgrade modal");
       setShowUpgradeModal(true);
       setLoading(false);
+      // Disconnect socket if it exists
+      if (socket) {
+        socket.disconnect();
+        setSocket(null);
+      }
       return; // Block socket connection
     }
     
-    console.log("✅ LiveChat: Subscription check passed - initializing socket");
+    // If subscription is active, hide upgrade modal and initialize socket
+    if (hasActive) {
+      console.log("✅ LiveChat: Subscription check passed - hiding modal and initializing socket");
+      setShowUpgradeModal(false); // Hide modal if subscription becomes active
+      
+      // If socket is not connected, initialize it
+      if (!socket) {
+        initializeSocket();
+      }
+    }
+  }, [user, subscription, subscriptionLoading]);
+
+  const initializeSocket = () => {
+    if (!user) return;
+    
+    console.log("🔌 LiveChat: Initializing socket connection");
 
     // Initialize socket connection
     const newSocket = io(SOCKET_URL, {
@@ -102,7 +210,7 @@ const LiveChat = () => {
     });
 
     newSocket.on("connect", () => {
-      console.log("Connected to server");
+      console.log("✅ LiveChat: Connected to server");
       newSocket.emit("join", user.id);
     });
 
@@ -111,8 +219,10 @@ const LiveChat = () => {
         const message = data.data;
         
         // Ignore messages from the current user (they should be handled by message_sent)
-        const senderId = message.sender?._id || message.sender;
-        if (String(senderId) === String(user.id)) {
+        // Handle both populated senderId (object) and unpopulated senderId (string)
+        const senderId = (typeof message.senderId === 'object' ? message.senderId?._id : message.senderId) || message.sender?._id || message.sender;
+        const userId = user?.id || user?._id;
+        if (String(senderId) === String(userId)) {
           return;
         }
         
@@ -122,10 +232,11 @@ const LiveChat = () => {
             if (m._id && message._id) {
               return String(m._id) === String(message._id);
             }
+            const mSenderId = (typeof m.senderId === 'object' ? m.senderId?._id : m.senderId) || m.sender?._id || m.sender;
+            const msgSenderId = (typeof message.senderId === 'object' ? message.senderId?._id : message.senderId) || message.sender?._id || message.sender;
             return (
               m.message === message.message &&
-              (m.sender?._id === message.sender?._id ||
-                m.sender === message.sender?._id) &&
+              String(mSenderId) === String(msgSenderId) &&
               Math.abs(
                 new Date(m.createdAt).getTime() -
                   new Date(message.createdAt).getTime()
@@ -144,16 +255,19 @@ const LiveChat = () => {
         const message = data.data;
         
         // Only process messages sent by the current user
-        const senderId = message.sender?._id || message.sender;
-        if (String(senderId) !== String(user.id)) {
+        // Handle both populated senderId (object) and unpopulated senderId (string)
+        const senderId = (typeof message.senderId === 'object' ? message.senderId?._id : message.senderId) || message.sender?._id || message.sender;
+        const userId = user?.id || user?._id;
+        if (String(senderId) !== String(userId)) {
           return;
         }
         
         setMessages((prev) => {
           // Remove any temporary messages with the same content from the current user
           const filtered = prev.filter((m) => {
-            const mSenderId = m.sender?._id || m.sender;
-            const isOwnTemp = m._id?.startsWith("temp_") && String(mSenderId) === String(user.id);
+            const mSenderId = (typeof m.senderId === 'object' ? m.senderId?._id : m.senderId) || m.sender?._id || m.sender;
+            const userId = user?.id || user?._id;
+            const isOwnTemp = m._id?.startsWith("temp_") && String(mSenderId) === String(userId);
             
             // Remove temp messages that match this confirmed message
             if (isOwnTemp) {
@@ -199,10 +313,22 @@ const LiveChat = () => {
     // Fetch admin info and create/get conversation
     fetchAdminAndConversation();
 
+    // Return cleanup function
     return () => {
-      newSocket.disconnect();
+      if (newSocket) {
+        newSocket.disconnect();
+      }
     };
-  }, [user]);
+  };
+
+  // Cleanup socket on unmount
+  useEffect(() => {
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [socket]);
 
   const fetchAdminAndConversation = async () => {
     try {
@@ -262,14 +388,61 @@ const LiveChat = () => {
     messagesEndRef.current?.scrollToEnd({ animated: true });
   };
 
+  // Handle keyboard show/hide to scroll messages and track keyboard height
+  useEffect(() => {
+    const keyboardDidShowListener = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow",
+      (e) => {
+        setKeyboardHeight(e.endCoordinates.height);
+        setTimeout(() => {
+          scrollToBottom();
+        }, 100);
+      }
+    );
+
+    const keyboardDidHideListener = Keyboard.addListener(
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide",
+      () => {
+        setKeyboardHeight(0);
+      }
+    );
+
+    return () => {
+      keyboardDidShowListener.remove();
+      keyboardDidHideListener.remove();
+    };
+  }, []);
+
   const handleSend = () => {
+    // Wait for subscription to finish loading
+    if (subscriptionLoading) {
+      // Show loader - subscription loading state will be handled by the component
+      // Wait for subscription to load, then proceed
+      const checkSubscription = setInterval(() => {
+        if (!subscriptionLoading) {
+          clearInterval(checkSubscription);
+          // Retry the action after subscription loads
+          setTimeout(() => handleSend(), 100);
+        }
+      }, 100);
+      return;
+    }
+
     // Check subscription before sending message
+    console.log("🔍 LiveChat: Checking subscription before sending message");
+    console.log("  - Loading:", subscriptionLoading);
+    console.log("  - Subscription:", subscription ? JSON.stringify(subscription, null, 2) : "null");
+    
     const hasActive = hasActiveSubscription(subscription);
+    console.log("  - Has active subscription:", hasActive);
+    
     if (!hasActive) {
       console.log("❌ LiveChat: No subscription - blocking message send");
       setShowUpgradeModal(true);
       return;
     }
+    
+    console.log("✅ LiveChat: Subscription check passed - allowing message send");
     
     if (!newMessage.trim() || !socket || !conversationId || !adminInfo) return;
 
@@ -308,12 +481,15 @@ const LiveChat = () => {
 
     setMessages((prev) => {
       // Check if message already exists (prevent double sending)
-      const exists = prev.some(
-        (m) =>
+      const userId = user?.id || user?._id;
+      const exists = prev.some((m) => {
+        const mSenderId = (typeof m.senderId === 'object' ? m.senderId?._id : m.senderId) || m.sender?._id || m.sender;
+        return (
           m.message === messageText &&
-          (m.sender?._id === user.id || m.sender === user.id) &&
+          String(mSenderId) === String(userId) &&
           Math.abs(new Date(m.createdAt).getTime() - Date.now()) < 2000
-      );
+        );
+      });
       if (exists) return prev;
       return [...prev, tempMessage];
     });
@@ -352,8 +528,8 @@ const LiveChat = () => {
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+        // behavior={Platform.OS === "ios" ? "padding" : "padding"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
       >
         {/* Header */}
         <View style={styles.header}>
@@ -376,7 +552,10 @@ const LiveChat = () => {
         <ScrollView
           ref={messagesEndRef}
           style={styles.messagesContainer}
+          contentContainerStyle={styles.messagesContent}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
           onContentSizeChange={() => scrollToBottom()}
         >
           {messages.length === 0 ? (
@@ -388,8 +567,21 @@ const LiveChat = () => {
             </View>
           ) : (
             messages.map((msg, index) => {
-              const isOwnMessage =
-                msg.sender?._id === user.id || msg.sender === user.id;
+              // Check multiple ways the sender ID might be stored
+              // Handle both populated senderId (object) and unpopulated senderId (string)
+              const msgSenderId = (typeof msg.senderId === 'object' ? msg.senderId?._id : msg.senderId) || msg.sender?._id || msg.sender;
+              const userId = user?.id || user?._id;
+              const isOwnMessage = String(msgSenderId) === String(userId);
+              
+              console.log("🔍 Message ownership check:", {
+                msgId: msg._id,
+                msgSenderId,
+                userId,
+                isOwnMessage,
+                hasSender: !!msg.sender,
+                hasSenderId: !!msg.senderId,
+              });
+              
               return (
                 <View
                   key={msg._id || `msg-${index}`}
@@ -430,7 +622,7 @@ const LiveChat = () => {
         </ScrollView>
 
         {/* Input Area */}
-        <View style={styles.inputContainer}>
+        <View style={[styles.inputContainer, Platform.OS === "android" && keyboardHeight > 0 && { paddingBottom: keyboardHeight - 55 }]}>
           <TextInput
             style={styles.input}
             value={newMessage}
@@ -440,6 +632,12 @@ const LiveChat = () => {
             multiline
             maxLength={500}
             onSubmitEditing={handleSend}
+            onFocus={() => {
+              setTimeout(() => {
+                scrollToBottom();
+              }, 100);
+            }}
+            blurOnSubmit={false}
           />
           <TouchableOpacity
             style={[
@@ -458,14 +656,46 @@ const LiveChat = () => {
         </View>
       </KeyboardAvoidingView>
 
+      {/* Loading Overlay */}
+      <Modal
+        visible={subscriptionLoading}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingModalContainer}>
+            <ActivityIndicator size="large" color="#6366f1" />
+            <Text style={styles.loadingModalText}>Checking subscription...</Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* Upgrade Modal */}
       <UpgradeModal
         visible={showUpgradeModal}
-        onClose={() => {
+        onClose={async () => {
           console.log("🔒 LiveChat: Upgrade modal closed");
           setShowUpgradeModal(false);
-          // Navigate back if user closes modal
-          router.back();
+          
+          // Refresh subscription when modal closes (in case user just made payment)
+          console.log("🔄 LiveChat: Refreshing subscription after modal close");
+          await refreshSubscription();
+          
+          // Wait a moment for subscription state to update
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // Re-check subscription after refresh
+          const updatedSubscription = await fetchSubscriptionForCheck();
+          const hasActive = hasActiveSubscription(updatedSubscription);
+          
+          if (hasActive) {
+            console.log("✅ LiveChat: Subscription now active - initializing socket");
+            initializeSocket();
+          } else {
+            console.log("❌ LiveChat: Still no subscription - navigating back");
+            // Navigate back if still no subscription
+            router.back();
+          }
         }}
         isPremiumFeature={false}
         featureName="Live Chat Support"
@@ -527,7 +757,10 @@ const styles = StyleSheet.create({
   },
   messagesContainer: {
     flex: 1,
+  },
+  messagesContent: {
     padding: 16,
+    flexGrow: 1,
   },
   emptyContainer: {
     flex: 1,
@@ -587,11 +820,12 @@ const styles = StyleSheet.create({
   },
   inputContainer: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     padding: 12,
     backgroundColor: "#ffffff",
     borderTopWidth: 1,
     borderTopColor: "#e2e8f0",
+    paddingBottom: Platform.OS === "ios" ? 12 : 12,
   },
   input: {
     flex: 1,
@@ -614,6 +848,25 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: "#e2e8f0",
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingModalContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    minWidth: 200,
+  },
+  loadingModalText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#1e293b",
+    fontWeight: "500",
   },
 });
 

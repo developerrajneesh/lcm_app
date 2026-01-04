@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useState, useEffect } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Alert,
   SafeAreaView,
@@ -13,16 +13,19 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system/legacy";
 import * as Linking from "expo-linking";
 import * as Clipboard from "expo-clipboard";
+import { WebView } from "react-native-webview";
 import { API_BASE_URL } from "../../config/api";
 import { useSubscription } from "../../hooks/useSubscription";
-import { hasFeatureAccess, hasActiveSubscription } from "../../utils/subscription";
+import {
+  hasFeatureAccess,
+  hasActiveSubscription,
+} from "../../utils/subscription";
 import UpgradeModal from "../../Components/UpgradeModal";
 
 const IvrForm = () => {
@@ -33,9 +36,55 @@ const IvrForm = () => {
   const [existingRequest, setExistingRequest] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  
+  const [showCreditsModal, setShowCreditsModal] = useState(false);
+  const [creditsAmount, setCreditsAmount] = useState("");
+  const [showPaymentWebView, setShowPaymentWebView] = useState(false);
+  const [paymentHtml, setPaymentHtml] = useState("");
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
   // Subscription
-  const { subscription } = useSubscription();
+  const { subscription, refreshSubscription, loading: subscriptionLoading } = useSubscription();
+
+  // Use a ref to store the latest refreshSubscription function and prevent multiple simultaneous refreshes
+  const refreshSubscriptionRef = useRef(refreshSubscription);
+  const isRefreshingRef = useRef(false);
+  
+  // Update ref when refreshSubscription changes
+  useEffect(() => {
+    refreshSubscriptionRef.current = refreshSubscription;
+  }, [refreshSubscription]);
+
+  // Refresh subscription when screen comes into focus (e.g., after payment)
+  useFocusEffect(
+    useCallback(() => {
+      // Prevent multiple simultaneous refreshes
+      if (isRefreshingRef.current) {
+        return;
+      }
+      
+      isRefreshingRef.current = true;
+      console.log("🔄 IvrForm: Screen focused - refreshing subscription");
+      refreshSubscriptionRef.current();
+      
+      // Reset ref after a short delay
+      setTimeout(() => {
+        isRefreshingRef.current = false;
+      }, 1000);
+    }, []) // Empty dependency array - only run on focus
+  );
+
+  // Auto-hide upgrade modal when subscription becomes active
+  useEffect(() => {
+    if (!subscriptionLoading && subscription) {
+      const hasActive = hasActiveSubscription(subscription);
+      const hasAccess = hasFeatureAccess(subscription, "ivr-campaign");
+      
+      if (hasActive && hasAccess) {
+        console.log("✅ IvrForm: Subscription is now active - hiding upgrade modal");
+        setShowUpgradeModal(false);
+      }
+    }
+  }, [subscription, subscriptionLoading]);
 
   const [formData, setFormData] = useState({
     fullName: "",
@@ -46,10 +95,8 @@ const IvrForm = () => {
     companyName: "",
     businessType: "",
     state: "",
-    gstCertificate: null as string | null,
+    ivrType: "",
   });
-
-  const [gstPreview, setGstPreview] = useState<string | null>(null);
 
   const businessTypes = [
     "Individual",
@@ -66,9 +113,11 @@ const IvrForm = () => {
   const loadUserData = async () => {
     try {
       const userData = await AsyncStorage.getItem("user");
+      const token = await AsyncStorage.getItem("authToken");
       if (userData) {
         const parsedUser = JSON.parse(userData);
         setUser(parsedUser);
+        setAuthToken(token);
         checkExistingRequest(parsedUser.id);
       } else {
         Alert.alert("Error", "Please login to apply for IVR");
@@ -102,78 +151,41 @@ const IvrForm = () => {
     }
   };
 
-  const handleFilePick = async () => {
-    try {
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert(
-          "Permission Required",
-          "Please grant camera roll permissions to upload a file."
-        );
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.All,
-        allowsEditing: false,
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const fileType = asset.mimeType || "";
-
-        // Validate file type
-        const allowedTypes = [
-          "application/pdf",
-          "image/jpeg",
-          "image/jpg",
-          "image/png",
-        ];
-        if (!allowedTypes.includes(fileType)) {
-          Alert.alert("Error", "Please upload a PDF, JPG, or PNG file");
-          return;
-        }
-
-        // Validate file size (max 10MB)
-        if (asset.fileSize && asset.fileSize > 10 * 1024 * 1024) {
-          Alert.alert("Error", "File size should be less than 10MB");
-          return;
-        }
-
-        // Convert to base64
-        try {
-          const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-            encoding: "base64",
-          } as any);
-          const base64Data = `data:${fileType};base64,${base64}`;
-          setGstPreview(asset.uri);
-          setFormData((prev) => ({
-            ...prev,
-            gstCertificate: base64Data,
-          }));
-          setError("");
-        } catch (error) {
-          console.error("Error converting file:", error);
-          Alert.alert("Error", "Failed to process file");
-        }
-      }
-    } catch (error) {
-      console.error("File picker error:", error);
-      Alert.alert("Error", "Failed to pick file");
-    }
-  };
-
   const handleSubmit = async () => {
     setError("");
+
+    // Check subscription first - wait if still loading
+    if (subscriptionLoading) {
+      // Show loader - subscription loading state will be handled by the component
+      // Wait for subscription to load, then proceed
+      const checkSubscription = setInterval(() => {
+        if (!subscriptionLoading) {
+          clearInterval(checkSubscription);
+          // Retry the action after subscription loads
+          setTimeout(() => handleSubmit(), 100);
+        }
+      }, 100);
+      return;
+    }
+
+    console.log("🔍 IvrForm: Checking subscription for IVR campaign");
+    console.log("  - Loading:", subscriptionLoading);
+    console.log("  - Subscription:", subscription ? JSON.stringify(subscription, null, 2) : "null");
     
-    // Check subscription first
-    if (!hasActiveSubscription(subscription) || !hasFeatureAccess(subscription, "ivr-campaign")) {
+    const hasActive = hasActiveSubscription(subscription);
+    const hasAccess = hasFeatureAccess(subscription, "ivr-campaign");
+    
+    console.log("  - Has active subscription:", hasActive);
+    console.log("  - Has IVR access:", hasAccess);
+
+    if (!hasActive || !hasAccess) {
+      console.log("❌ IvrForm: Subscription check failed - showing upgrade modal");
       setShowUpgradeModal(true);
       return;
     }
     
+    console.log("✅ IvrForm: Subscription check passed - proceeding with submission");
+
     setLoading(true);
 
     // Check if user already has a pending or approved request
@@ -194,7 +206,7 @@ const IvrForm = () => {
       !formData.password ||
       !formData.companyName ||
       !formData.state ||
-      !formData.gstCertificate
+      !formData.ivrType
     ) {
       setError("Please fill all required fields");
       setLoading(false);
@@ -225,9 +237,22 @@ const IvrForm = () => {
     }
 
     try {
+      // Clean and format the payload to match web form
+      const payload = {
+        fullName: formData.fullName.trim(),
+        mobileNumber: formData.mobileNumber.replace(/\D/g, ""), // Remove non-digits
+        emailId: formData.emailId.trim().toLowerCase(),
+        userId: formData.userId.trim(),
+        password: formData.password,
+        companyName: formData.companyName.trim(),
+        businessType: formData.businessType.trim(),
+        state: formData.state.trim(),
+        ivrType: formData.ivrType.trim() || "15s", // Default to "15s" if empty
+      };
+
       const response = await axios.post(
         `${API_BASE_URL}/ivr-requests`,
-        formData,
+        payload,
         {
           headers: {
             "Content-Type": "application/json",
@@ -250,9 +275,8 @@ const IvrForm = () => {
           companyName: "",
           businessType: "",
           state: "",
-          gstCertificate: null,
+          ivrType: "",
         });
-        setGstPreview(null);
         Alert.alert("Success", "IVR request submitted successfully!");
       } else {
         setError(response.data.error || "Failed to submit request");
@@ -276,6 +300,191 @@ const IvrForm = () => {
 
   const openIvrPlatform = () => {
     Linking.openURL("https://voice.whatsupninja.in/");
+  };
+
+  const handleBuyCredits = async () => {
+    if (!creditsAmount || parseInt(creditsAmount) < 5000) {
+      Alert.alert("Error", "Minimum 5000 credits required");
+      return;
+    }
+
+    if (!existingRequest || !existingRequest.ivrType) {
+      Alert.alert("Error", "IVR Type not found. Please contact support.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const ivrType = existingRequest.ivrType || "15s";
+      const pricePerCredit = ivrType === "30s" ? 0.24 : 0.15;
+      const totalAmount = pricePerCredit * parseInt(creditsAmount);
+
+      // Create order on backend
+      const config: any = {
+        headers: {
+          "Content-Type": "application/json",
+          "user-id": user.id,
+        },
+      };
+
+      if (authToken) {
+        config.headers.Authorization = `Bearer ${authToken}`;
+      }
+
+      const orderResponse = await axios.post(
+        `${API_BASE_URL}/ivr-credits/create-order`,
+        {
+          amount: totalAmount,
+          credits: parseInt(creditsAmount),
+          ivrType: ivrType,
+          ivrRequestId: existingRequest._id,
+        },
+        config
+      );
+
+      if (!orderResponse.data.success) {
+        throw new Error(orderResponse.data.error || "Failed to create order");
+      }
+
+      const { order, keyId } = orderResponse.data;
+
+      // Create HTML for Razorpay checkout
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+        </head>
+        <body style="margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #f5f5f5;">
+          <div id="razorpay-container"></div>
+          <script>
+            var options = {
+              "key": "${keyId}",
+              "amount": "${order.amount}",
+              "currency": "INR",
+              "name": "LCM",
+              "description": "IVR Credits - ${creditsAmount} credits (${ivrType})",
+              "order_id": "${order.id}",
+              "handler": function (response) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'success',
+                  data: response
+                }));
+              },
+              "prefill": {
+                "name": "${user.name || ""}",
+                "email": "${user.email || ""}",
+                "contact": "${user.phoneNumber || ""}"
+              },
+              "theme": {
+                "color": "#6366f1"
+              },
+              "modal": {
+                "ondismiss": function() {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({
+                    type: 'cancelled'
+                  }));
+                }
+              }
+            };
+            var rzp = new Razorpay(options);
+            rzp.open();
+          </script>
+        </body>
+        </html>
+      `;
+
+      setPaymentHtml(htmlContent);
+      setShowPaymentWebView(true);
+      setShowCreditsModal(false);
+      setLoading(false);
+    } catch (err: any) {
+      console.error("Error processing payment:", err);
+      Alert.alert(
+        "Error",
+        err.response?.data?.error ||
+          err.message ||
+          "Failed to process payment. Please try again."
+      );
+      setLoading(false);
+    }
+  };
+
+  const handleWebViewMessage = async (event: any) => {
+    try {
+      const message = JSON.parse(event.nativeEvent.data);
+
+      if (message.type === "cancelled") {
+        setShowPaymentWebView(false);
+        setLoading(false);
+        return;
+      }
+
+      if (message.type === "success") {
+        setShowPaymentWebView(false);
+
+        // Verify payment on backend
+        const verifyConfig: any = {
+          headers: {
+            "Content-Type": "application/json",
+            "user-id": user.id,
+          },
+        };
+
+        if (authToken) {
+          verifyConfig.headers.Authorization = `Bearer ${authToken}`;
+        }
+
+        const ivrType = existingRequest.ivrType || "15s";
+        const pricePerCredit = ivrType === "30s" ? 0.24 : 0.15;
+        const totalAmount = pricePerCredit * parseInt(creditsAmount);
+
+        const verifyResponse = await axios.post(
+          `${API_BASE_URL}/ivr-credits/verify-payment`,
+          {
+            razorpay_order_id: message.data.razorpay_order_id,
+            razorpay_payment_id: message.data.razorpay_payment_id,
+            razorpay_signature: message.data.razorpay_signature,
+            credits: parseInt(creditsAmount),
+            ivrType: ivrType,
+            ivrRequestId: existingRequest._id,
+            amount: totalAmount,
+          },
+          verifyConfig
+        );
+
+        if (verifyResponse.data.success) {
+          Alert.alert(
+            "Success",
+            "Payment successful! Credits have been added to your account.",
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  setCreditsAmount("");
+                  setError("");
+                },
+              },
+            ]
+          );
+        } else {
+          Alert.alert(
+            "Error",
+            verifyResponse.data.error ||
+              "Payment verification failed. Please contact support."
+          );
+        }
+        setLoading(false);
+      }
+    } catch (error: any) {
+      console.error("Error handling payment response:", error);
+      setShowPaymentWebView(false);
+      setLoading(false);
+      Alert.alert("Error", "Failed to process payment. Please try again.");
+    }
   };
 
   // Show loading state while checking existing request
@@ -359,20 +568,31 @@ const IvrForm = () => {
             </Text>
 
             <View style={styles.credentialsContainer}>
-              <Text style={styles.credentialsTitle}>Your Login Credentials</Text>
+              <Text style={styles.credentialsTitle}>
+                Your Login Credentials
+              </Text>
 
               <View style={styles.credentialItem}>
                 <Text style={styles.credentialLabel}>User ID</Text>
                 <View style={styles.credentialRow}>
                   <TextInput
                     style={styles.credentialInput}
-                    value={existingRequest.accountUserId || existingRequest.userId || ""}
+                    value={
+                      existingRequest.accountUserId ||
+                      existingRequest.userId ||
+                      ""
+                    }
                     editable={false}
                   />
                   <TouchableOpacity
                     style={styles.copyButton}
                     onPress={() =>
-                      copyToClipboard(existingRequest.accountUserId || existingRequest.userId || "", "User ID")
+                      copyToClipboard(
+                        existingRequest.accountUserId ||
+                          existingRequest.userId ||
+                          "",
+                        "User ID"
+                      )
                     }
                   >
                     <Ionicons name="copy-outline" size={20} color="#6366f1" />
@@ -385,14 +605,23 @@ const IvrForm = () => {
                 <View style={styles.credentialRow}>
                   <TextInput
                     style={styles.credentialInput}
-                    value={existingRequest.accountPassword || existingRequest.password || ""}
+                    value={
+                      existingRequest.accountPassword ||
+                      existingRequest.password ||
+                      ""
+                    }
                     editable={false}
                     secureTextEntry={false}
                   />
                   <TouchableOpacity
                     style={styles.copyButton}
                     onPress={() =>
-                      copyToClipboard(existingRequest.accountPassword || existingRequest.password || "", "Password")
+                      copyToClipboard(
+                        existingRequest.accountPassword ||
+                          existingRequest.password ||
+                          "",
+                        "Password"
+                      )
                     }
                   >
                     <Ionicons name="copy-outline" size={20} color="#6366f1" />
@@ -401,15 +630,201 @@ const IvrForm = () => {
               </View>
             </View>
 
-            <TouchableOpacity
-              style={styles.ivrButton}
-              onPress={openIvrPlatform}
-            >
-              <Ionicons name="call-outline" size={20} color="#ffffff" />
-              <Text style={styles.ivrButtonText}>Go to IVR</Text>
-            </TouchableOpacity>
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={[styles.ivrButton, styles.buttonHalf]}
+                onPress={openIvrPlatform}
+              >
+                <Ionicons name="call-outline" size={20} color="#ffffff" />
+                <Text style={styles.ivrButtonText}>Go to IVR</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.creditsButton, styles.buttonHalf]}
+                onPress={() => setShowCreditsModal(true)}
+              >
+                <Ionicons name="card-outline" size={20} color="#ffffff" />
+                <Text style={styles.creditsButtonText}>Buy Credits</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </ScrollView>
+
+        {/* Buy Credits Modal */}
+        <Modal
+          visible={showCreditsModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => {
+            setShowCreditsModal(false);
+            setCreditsAmount("");
+            setError("");
+          }}
+        >
+          <SafeAreaView style={styles.modalOverlayContainer}>
+            <TouchableOpacity
+              style={styles.modalOverlay}
+              activeOpacity={1}
+              onPress={() => {
+                setShowCreditsModal(false);
+                setCreditsAmount("");
+                setError("");
+              }}
+            >
+              <TouchableOpacity
+                style={styles.modalContent}
+                activeOpacity={1}
+                onPress={(e) => e.stopPropagation()}
+              >
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Buy IVR Credits</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setShowCreditsModal(false);
+                      setCreditsAmount("");
+                      setError("");
+                    }}
+                  >
+                    <Ionicons name="close" size={24} color="#1e293b" />
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView
+                  style={styles.modalBody}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Enter Credits Amount *</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={creditsAmount}
+                      onChangeText={(text) => {
+                        setCreditsAmount(text);
+                        setError("");
+                      }}
+                      placeholder="Minimum 5000 credits"
+                      placeholderTextColor="#94a3b8"
+                      keyboardType="numeric"
+                    />
+                    <Text style={styles.helperText}>Minimum: 5000 credits</Text>
+                  </View>
+
+                  {creditsAmount && parseInt(creditsAmount) >= 5000 && (
+                    <View style={styles.priceContainer}>
+                      <Text style={styles.priceTitle}>Price Details</Text>
+                      <View style={styles.priceRow}>
+                        <Text style={styles.priceLabel}>IVR Type:</Text>
+                        <Text style={styles.priceValue}>
+                          {existingRequest?.ivrType || "15s"}
+                        </Text>
+                      </View>
+                      <View style={styles.priceRow}>
+                        <Text style={styles.priceLabel}>Price per Credit:</Text>
+                        <Text style={styles.priceValue}>
+                          ₹
+                          {existingRequest?.ivrType === "30s" ? "0.24" : "0.15"}
+                        </Text>
+                      </View>
+                      <View style={styles.priceRow}>
+                        <Text style={styles.priceLabel}>Total Credits:</Text>
+                        <Text style={styles.priceValue}>
+                          {parseInt(creditsAmount).toLocaleString()}
+                        </Text>
+                      </View>
+                      <View style={styles.priceDivider} />
+                      <View style={styles.priceRow}>
+                        <Text style={styles.totalLabel}>Total Amount:</Text>
+                        <Text style={styles.totalValue}>
+                          ₹
+                          {(
+                            (existingRequest?.ivrType === "30s" ? 0.24 : 0.15) *
+                            parseInt(creditsAmount)
+                          ).toFixed(2)}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {error ? (
+                    <View style={styles.errorContainer}>
+                      <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                  ) : null}
+                </ScrollView>
+
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity
+                    style={[
+                      styles.payButton,
+                      (!creditsAmount ||
+                        parseInt(creditsAmount) < 5000 ||
+                        loading) &&
+                        styles.payButtonDisabled,
+                    ]}
+                    onPress={handleBuyCredits}
+                    disabled={
+                      !creditsAmount ||
+                      parseInt(creditsAmount) < 5000 ||
+                      loading
+                    }
+                  >
+                    {loading ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="card-outline"
+                          size={20}
+                          color="#ffffff"
+                        />
+                        <Text style={styles.payButtonText}>
+                          Proceed to Payment
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
+            </TouchableOpacity>
+          </SafeAreaView>
+        </Modal>
+
+        {/* Razorpay Payment WebView Modal */}
+        <Modal
+          visible={showPaymentWebView}
+          animationType="slide"
+          onRequestClose={() => {
+            setShowPaymentWebView(false);
+            setLoading(false);
+          }}
+        >
+          <SafeAreaView style={styles.webViewContainer}>
+            <View style={styles.webViewHeader}>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowPaymentWebView(false);
+                  setLoading(false);
+                }}
+                style={styles.closeButton}
+              >
+                <Ionicons name="close" size={24} color="#1e293b" />
+              </TouchableOpacity>
+              <Text style={styles.webViewTitle}>Complete Payment</Text>
+              <View style={styles.placeholder} />
+            </View>
+            <WebView
+              source={{ html: paymentHtml }}
+              onMessage={handleWebViewMessage}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              startInLoadingState={true}
+              renderLoading={() => (
+                <View style={styles.webViewLoading}>
+                  <ActivityIndicator size="large" color="#6366f1" />
+                </View>
+              )}
+            />
+          </SafeAreaView>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -645,48 +1060,42 @@ const IvrForm = () => {
                 placeholderTextColor="#94a3b8"
               />
             </View>
-          </View>
-
-          {/* GST Details Section */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>GST Details</Text>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Upload GST Certificate *</Text>
-              <Text style={styles.helperText}>
-                PDF / JPG / PNG allowed (Max 10MB)
-              </Text>
-
-              {gstPreview ? (
-                <View style={styles.filePreviewContainer}>
-                  <Ionicons name="document" size={32} color="#6366f1" />
-                  <Text style={styles.filePreviewText}>File Selected</Text>
+              <Text style={styles.label}>IVR Type *</Text>
+              <View style={styles.pickerContainer}>
+                {["15s", "30s"].map((type) => (
                   <TouchableOpacity
-                    style={styles.removeFileButton}
+                    key={type}
+                    style={[
+                      styles.pickerOption,
+                      formData.ivrType === type && styles.pickerOptionSelected,
+                    ]}
                     onPress={() => {
-                      setGstPreview(null);
-                      setFormData({ ...formData, gstCertificate: null });
+                      setFormData({ ...formData, ivrType: type });
+                      setError("");
                     }}
                   >
-                    <Ionicons name="close-circle" size={24} color="#ef4444" />
+                    <Text
+                      style={[
+                        styles.pickerOptionText,
+                        formData.ivrType === type &&
+                          styles.pickerOptionTextSelected,
+                      ]}
+                    >
+                      {type}
+                    </Text>
                   </TouchableOpacity>
-                </View>
-              ) : (
-                <TouchableOpacity
-                  style={styles.uploadButton}
-                  onPress={handleFilePick}
-                >
-                  <Ionicons name="cloud-upload-outline" size={32} color="#6366f1" />
-                  <Text style={styles.uploadButtonText}>
-                    Tap to Upload Certificate
-                  </Text>
-                </TouchableOpacity>
-              )}
+                ))}
+              </View>
             </View>
           </View>
 
           <TouchableOpacity
-            style={[styles.submitButton, loading && styles.submitButtonDisabled]}
+            style={[
+              styles.submitButton,
+              loading && styles.submitButtonDisabled,
+            ]}
             onPress={handleSubmit}
             disabled={loading}
           >
@@ -704,10 +1113,35 @@ const IvrForm = () => {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      {/* Loading Overlay */}
+      <Modal
+        visible={subscriptionLoading}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingModalContainer}>
+            <ActivityIndicator size="large" color="#6366f1" />
+            <Text style={styles.loadingModalText}>Checking subscription...</Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* Upgrade Modal */}
       <UpgradeModal
         visible={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
+        onClose={async () => {
+          setShowUpgradeModal(false);
+          
+          // Refresh subscription when modal closes (in case user just made payment)
+          console.log("🔄 IvrForm: Refreshing subscription after modal close");
+          await refreshSubscription();
+          
+          // Wait a moment for subscription state to update
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          console.log("✅ IvrForm: Subscription refreshed - user can now access IVR features");
+        }}
         isPremiumFeature={true}
         featureName="IVR Campaign"
       />
@@ -1054,7 +1488,180 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 8,
+  },
+  buttonHalf: {
+    flex: 1,
+  },
+  creditsButton: {
+    backgroundColor: "#6366f1",
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  creditsButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  // Modal Styles
+  modalOverlayContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-start",
+  },
+  modalContent: {
+    backgroundColor: "#ffffff",
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    maxHeight: "90%",
+    paddingBottom: 20,
+    paddingTop: 30,
+    marginTop: 0,
+    width: "100%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e2e8f0",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1e293b",
+  },
+  modalBody: {
+    padding: 20,
+    maxHeight: 400,
+  },
+  modalFooter: {
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+  },
+  priceContainer: {
+    backgroundColor: "#f8fafc",
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 16,
+  },
+  priceTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 12,
+  },
+  priceRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  priceLabel: {
+    fontSize: 14,
+    color: "#64748b",
+  },
+  priceValue: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#1e293b",
+  },
+  priceDivider: {
+    height: 1,
+    backgroundColor: "#e2e8f0",
+    marginVertical: 12,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#1e293b",
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#6366f1",
+  },
+  payButton: {
+    backgroundColor: "#6366f1",
+    borderRadius: 12,
+    paddingVertical: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  payButtonDisabled: {
+    backgroundColor: "#94a3b8",
+    opacity: 0.6,
+  },
+  payButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  webViewContainer: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+  },
+  webViewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+    marginTop: 35,
+    borderBottomColor: "#e2e8f0",
+    backgroundColor: "#ffffff",
+  },
+  webViewTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    // marginTop: 35,
+    color: "#1e293b",
+  },
+  webViewLoading: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#ffffff",
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingModalContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    minWidth: 200,
+  },
+  loadingModalText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#1e293b",
+    fontWeight: "500",
+  },
 });
 
 export default IvrForm;
-

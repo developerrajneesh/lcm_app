@@ -8,7 +8,7 @@ import {
 } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useFocusEffect } from "@react-navigation/native";
 import { useLocalSearchParams } from "expo-router";
 import {
@@ -1571,8 +1571,49 @@ const MetaAdsScreen = () => {
   const [tempValue, setTempValue] = useState("");
   
   // Subscription
-  const { subscription, loading: subscriptionLoading } = useSubscription();
+  const { subscription, loading: subscriptionLoading, refreshSubscription } = useSubscription();
+
+  // Use a ref to store the latest refreshSubscription function and prevent multiple simultaneous refreshes
+  const refreshSubscriptionRef = useRef(refreshSubscription);
+  const isRefreshingRef = useRef(false);
+  
+  // Update ref when refreshSubscription changes
+  useEffect(() => {
+    refreshSubscriptionRef.current = refreshSubscription;
+  }, [refreshSubscription]);
+
+  // Refresh subscription when screen comes into focus (e.g., after payment)
+  useFocusEffect(
+    useCallback(() => {
+      // Prevent multiple simultaneous refreshes
+      if (isRefreshingRef.current) {
+        return;
+      }
+      
+      isRefreshingRef.current = true;
+      console.log("🔄 MetaAdsScreen: Screen focused - refreshing subscription");
+      refreshSubscriptionRef.current();
+      
+      // Reset ref after a short delay
+      setTimeout(() => {
+        isRefreshingRef.current = false;
+      }, 1000);
+    }, []) // Empty dependency array - only run on focus
+  );
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  
+  // Auto-hide upgrade modal when subscription becomes active
+  useEffect(() => {
+    if (!subscriptionLoading && subscription) {
+      const hasActive = hasActiveSubscription(subscription);
+      const hasAccess = hasFeatureAccess(subscription, "meta-ads");
+      
+      if (hasActive && hasAccess) {
+        console.log("✅ MetaAdsScreen: Subscription is now active - hiding upgrade modal");
+        setShowUpgradeModal(false);
+      }
+    }
+  }, [subscription, subscriptionLoading]);
   
   // User ID for notifications
   const [userId, setUserId] = useState(null);
@@ -2344,16 +2385,38 @@ const MetaAdsScreen = () => {
 
   // Step 1: Create Campaign
   const handleCreateCampaign = async () => {
+    // Wait for subscription to finish loading
+    if (subscriptionLoading) {
+      // Show loader - subscription loading state will be handled by the component
+      // Wait for subscription to load, then proceed
+      const checkSubscription = setInterval(() => {
+        if (!subscriptionLoading) {
+          clearInterval(checkSubscription);
+          // Retry the action after subscription loads
+          setTimeout(() => handleCreateCampaign(), 100);
+        }
+      }, 100);
+      return;
+    }
+
     // Check subscription first
+    console.log("🔍 MetaAdsScreen: Checking subscription for create campaign");
+    console.log("  - Loading:", subscriptionLoading);
+    console.log("  - Subscription:", subscription ? JSON.stringify(subscription, null, 2) : "null");
+    
     if (!hasActiveSubscription(subscription)) {
+      console.log("❌ MetaAdsScreen: No active subscription");
       setShowUpgradeModal(true);
       return;
     }
     
     if (!hasFeatureAccess(subscription, "meta-ads")) {
+      console.log("❌ MetaAdsScreen: No meta-ads feature access");
       setShowUpgradeModal(true);
       return;
     }
+    
+    console.log("✅ MetaAdsScreen: Subscription check passed - allowing campaign creation");
     
     if (!campaignName.trim()) {
       Alert.alert("Error", "Please enter a campaign name");
@@ -2423,11 +2486,29 @@ const MetaAdsScreen = () => {
 
   // Step 2: Create AdSet
   const handleCreateAdSet = async () => {
+    // Wait for subscription to finish loading
+    if (subscriptionLoading) {
+      // Show loader - subscription loading state will be handled by the component
+      // Wait for subscription to load, then proceed
+      const checkSubscription = setInterval(() => {
+        if (!subscriptionLoading) {
+          clearInterval(checkSubscription);
+          // Retry the action after subscription loads
+          setTimeout(() => handleCreateAdSet(), 100);
+        }
+      }, 100);
+      return;
+    }
+
     // Check subscription
+    console.log("🔍 MetaAdsScreen: Checking subscription for create adset");
     if (!hasActiveSubscription(subscription) || !hasFeatureAccess(subscription, "meta-ads")) {
+      console.log("❌ MetaAdsScreen: Subscription check failed for adset");
       setShowUpgradeModal(true);
       return;
     }
+    
+    console.log("✅ MetaAdsScreen: Subscription check passed - allowing adset creation");
     
     if (!adSetName.trim()) {
       Alert.alert("Error", "Please enter an ad set name");
@@ -2689,11 +2770,29 @@ const MetaAdsScreen = () => {
 
   // Step 3: Create Ad
   const handleCreateAd = async () => {
+    // Wait for subscription to finish loading
+    if (subscriptionLoading) {
+      // Show loader - subscription loading state will be handled by the component
+      // Wait for subscription to load, then proceed
+      const checkSubscription = setInterval(() => {
+        if (!subscriptionLoading) {
+          clearInterval(checkSubscription);
+          // Retry the action after subscription loads
+          setTimeout(() => handleCreateAd(), 100);
+        }
+      }, 100);
+      return;
+    }
+
     // Check subscription
+    console.log("🔍 MetaAdsScreen: Checking subscription for create ad");
     if (!hasActiveSubscription(subscription) || !hasFeatureAccess(subscription, "meta-ads")) {
+      console.log("❌ MetaAdsScreen: Subscription check failed for ad");
       setShowUpgradeModal(true);
       return;
     }
+    
+    console.log("✅ MetaAdsScreen: Subscription check passed - allowing ad creation");
     
     if (!adName.trim()) {
       Alert.alert("Error", "Please enter an ad name");
@@ -3241,10 +3340,35 @@ const MetaAdsScreen = () => {
         </View>
       </Modal>
 
+      {/* Loading Overlay */}
+      <Modal
+        visible={subscriptionLoading}
+        transparent={true}
+        animationType="fade"
+      >
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingModalContainer}>
+            <ActivityIndicator size="large" color="#6366f1" />
+            <Text style={styles.loadingModalText}>Checking subscription...</Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* Upgrade Modal */}
       <UpgradeModal
         visible={showUpgradeModal}
-        onClose={() => setShowUpgradeModal(false)}
+        onClose={async () => {
+          setShowUpgradeModal(false);
+          
+          // Refresh subscription when modal closes (in case user just made payment)
+          console.log("🔄 MetaAdsScreen: Refreshing subscription after modal close");
+          await refreshSubscription();
+          
+          // Wait a moment for subscription state to update
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          console.log("✅ MetaAdsScreen: Subscription refreshed - user can now access Meta Ads");
+        }}
         isPremiumFeature={false}
         featureName="Meta Ads"
       />
@@ -3675,6 +3799,25 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     fontSize: 14,
     color: "#1C1E21",
+    fontWeight: "500",
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingModalContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    minWidth: 200,
+  },
+  loadingModalText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#1e293b",
     fontWeight: "500",
   },
 });

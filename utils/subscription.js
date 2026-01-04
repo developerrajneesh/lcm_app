@@ -3,9 +3,8 @@ export const PLAN_FEATURES = {
   1: { // BASIC PLAN
     name: "BASIC PLAN",
     features: [
-      "meta-ads",
-      "whatsapp-marketing",
       "email-marketing",
+      "sms-marketing",
       "creative-workshop",
       "basic-support",
     ],
@@ -32,7 +31,18 @@ export const hasFeatureAccess = (subscription, feature) => {
     return false;
   }
   
-  if (subscription.subscriptionStatus !== "active") {
+  // Log subscription details for debugging
+  console.log("🔍 Feature access check details:", {
+    feature: feature,
+    hasSubscription: !!subscription,
+    subscriptionStatus: subscription.subscriptionStatus,
+    planId: subscription.planId,
+    planName: subscription.planName,
+  });
+  
+  // Check status (case-insensitive)
+  const status = subscription.subscriptionStatus?.toLowerCase();
+  if (status !== "active") {
     console.log("🔒 Feature access check: Status is not active:", subscription.subscriptionStatus);
     return false;
   }
@@ -50,8 +60,10 @@ export const hasFeatureAccess = (subscription, feature) => {
   const planId = subscription.planId;
   const planFeatures = PLAN_FEATURES[planId]?.features || [];
   
+  console.log("🔍 Plan features for planId", planId, ":", planFeatures);
+  
   const hasAccess = planFeatures.includes(feature);
-  console.log(`🔒 Feature access check: Feature "${feature}" ${hasAccess ? "GRANTED" : "DENIED"} for plan ${planId}`);
+  console.log(`🔒 Feature access check: Feature "${feature}" ${hasAccess ? "GRANTED" : "DENIED"} for plan ${planId} (${PLAN_FEATURES[planId]?.name || "Unknown"})`);
   
   return hasAccess;
 };
@@ -64,8 +76,19 @@ export const hasActiveSubscription = (subscription) => {
     return false;
   }
   
-  // Must have active status
-  if (subscription.subscriptionStatus !== "active") {
+  // Log subscription details for debugging
+  console.log("🔍 Subscription check details:", {
+    hasSubscription: !!subscription,
+    subscriptionStatus: subscription.subscriptionStatus,
+    planId: subscription.planId,
+    planName: subscription.planName,
+    endDate: subscription.endDate,
+    startDate: subscription.startDate,
+  });
+  
+  // Must have active status (case-insensitive check)
+  const status = subscription.subscriptionStatus?.toLowerCase();
+  if (status !== "active") {
     console.log("🔒 Subscription check: Status is not active:", subscription.subscriptionStatus);
     return false;
   }
@@ -75,12 +98,18 @@ export const hasActiveSubscription = (subscription) => {
     const endDate = new Date(subscription.endDate);
     const now = new Date();
     if (endDate < now) {
-      console.log("🔒 Subscription check: Subscription expired");
+      console.log("🔒 Subscription check: Subscription expired", {
+        endDate: endDate.toISOString(),
+        now: now.toISOString(),
+      });
       return false;
     }
   }
   
-  console.log("✅ Subscription check: Active subscription found");
+  console.log("✅ Subscription check: Active subscription found", {
+    planId: subscription.planId,
+    planName: subscription.planName,
+  });
   return true;
 };
 
@@ -91,6 +120,6 @@ export const getPlanName = (planId) => {
 
 // Check if feature requires premium
 export const isPremiumFeature = (feature) => {
-  return feature === "sms-marketing" || feature === "ivr-campaign";
+  return feature === "meta-ads" || feature === "whatsapp-marketing" || feature === "ivr-campaign";
 };
 

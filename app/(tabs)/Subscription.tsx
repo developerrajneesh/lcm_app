@@ -16,6 +16,7 @@ import { WebView } from "react-native-webview";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { API_BASE_URL } from "../../config/api";
+import { useSubscription } from "../../hooks/useSubscription";
 
 const Subscription = () => {
   const [loading, setLoading] = useState(false);
@@ -24,6 +25,20 @@ const Subscription = () => {
   const [paymentHtml, setPaymentHtml] = useState("");
   const [currentPlan, setCurrentPlan] = useState<any>(null);
   const [authToken, setAuthToken] = useState<string | null>(null);
+
+  // Subscription hook to refresh state after payment and get current subscription
+  const {
+    subscription,
+    loading: subscriptionLoading,
+    refreshSubscription,
+  } = useSubscription();
+
+  // Refresh subscription when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      refreshSubscription();
+    }, [refreshSubscription])
+  );
 
   // Load user data on mount
   useEffect(() => {
@@ -41,14 +56,14 @@ const Subscription = () => {
     try {
       const userData = await AsyncStorage.getItem("user");
       const token = await AsyncStorage.getItem("authToken");
-      
+
       // Clear user state if no data found (logout scenario)
       if (!userData) {
         setUser(null);
         setAuthToken(null);
         return;
       }
-      
+
       // Set user data if found (login scenario)
       if (userData) {
         setUser(JSON.parse(userData));
@@ -75,9 +90,8 @@ const Subscription = () => {
       discount: 50,
       period: "month",
       features: [
-        "Meta Ads",
-        "WhatsApp Marketing",
         "Email Marketing",
+        "SMS Marketing",
         "Premium Festival Creatives",
         "Basic Customer Support",
       ],
@@ -96,7 +110,8 @@ const Subscription = () => {
         "Email Marketing",
         "SMS Marketing",
         "IVR Voice Campaign",
-        "24x7 Priority Support",
+        "1k IVR Free Credits",
+        "24x7 Priority Support (Live Chat)",
         "Premium Festival Creatives",
       ],
       popular: true,
@@ -119,7 +134,7 @@ const Subscription = () => {
     "Real-Time Performance Dashboard",
   ];
 
-  const handleSubscribe = async (plan: typeof plans[0]) => {
+  const handleSubscribe = async (plan: (typeof plans)[0]) => {
     if (!user) {
       Alert.alert("Login Required", "Please login to subscribe", [
         { text: "OK", onPress: () => router.push("/Login") },
@@ -213,7 +228,9 @@ const Subscription = () => {
       console.error("Subscription error:", error);
       Alert.alert(
         "Error",
-        error.response?.data?.message || error.message || "Failed to process subscription"
+        error.response?.data?.message ||
+          error.message ||
+          "Failed to process subscription"
       );
       setLoading(false);
     }
@@ -222,7 +239,7 @@ const Subscription = () => {
   const handleWebViewMessage = async (event: any) => {
     try {
       const message = JSON.parse(event.nativeEvent.data);
-      
+
       if (message.type === "cancelled") {
         setShowPaymentWebView(false);
         setLoading(false);
@@ -231,7 +248,7 @@ const Subscription = () => {
 
       if (message.type === "success") {
         setShowPaymentWebView(false);
-        
+
         // Verify payment on backend
         const verifyConfig: any = {};
         if (authToken) {
@@ -255,13 +272,35 @@ const Subscription = () => {
         );
 
         if (verifyResponse.data.success) {
+          // Wait a moment for backend to process the subscription
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Refresh subscription state immediately
+          refreshSubscription();
+          
+          // Wait a bit more to ensure state is updated
+          await new Promise(resolve => setTimeout(resolve, 500));
+
           Alert.alert(
             "Success",
-            "Payment successful! Your subscription is now active.",
-            [{ text: "OK" }]
+            "Payment successful! Your subscription is now active. You can now access all premium features.",
+            [
+              {
+                text: "OK",
+                onPress: () => {
+                  // Refresh subscription again to ensure all components get updated state
+                  setTimeout(() => {
+                    refreshSubscription();
+                  }, 500);
+                },
+              },
+            ]
           );
         } else {
-          Alert.alert("Error", "Payment verification failed. Please contact support.");
+          Alert.alert(
+            "Error",
+            "Payment verification failed. Please contact support."
+          );
         }
         setLoading(false);
       }
@@ -282,7 +321,10 @@ const Subscription = () => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+          >
             <Ionicons name="arrow-back" size={24} color="#1e293b" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Subscription</Text>
@@ -291,11 +333,45 @@ const Subscription = () => {
 
         {/* Main Content */}
         <View style={styles.content}>
+          {/* Current Active Subscription */}
+          {subscription && subscription.subscriptionStatus === "active" && (
+            <View style={styles.activeSubscriptionCard}>
+              <View style={styles.activeSubscriptionHeader}>
+                <View style={styles.activeSubscriptionIcon}>
+                  <Ionicons name="checkmark-circle" size={24} color="#22c55e" />
+                </View>
+                <View style={styles.activeSubscriptionInfo}>
+                  <Text style={styles.activeSubscriptionTitle}>
+                    Active Subscription
+                  </Text>
+                  <Text style={styles.activeSubscriptionPlan}>
+                    {subscription.planName || `Plan ${subscription.planId}`}
+                  </Text>
+                  {subscription.endDate && (
+                    <Text style={styles.activeSubscriptionDate}>
+                      Valid until:{" "}
+                      {new Date(subscription.endDate).toLocaleDateString(
+                        "en-US",
+                        {
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
+                        }
+                      )}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            </View>
+          )}
+
           {/* Page Header */}
           <View style={styles.pageHeader}>
             <Text style={styles.pageTitle}>LCM - Launch Price Plans</Text>
             <Text style={styles.pageSubtitle}>
-              Choose the perfect plan for your business needs
+              {subscription && subscription.subscriptionStatus === "active"
+                ? "Upgrade or manage your subscription"
+                : "Choose the perfect plan for your business needs"}
             </Text>
           </View>
 
@@ -316,7 +392,7 @@ const Subscription = () => {
                 >
                   <View style={styles.planHeader}>
                     <Text style={styles.planName}>{plan.name}</Text>
-                    
+
                     <View style={styles.priceContainer}>
                       <View style={styles.priceRow}>
                         <Text style={styles.earlyBirdPrice}>
@@ -336,7 +412,9 @@ const Subscription = () => {
                           From ₹{plan.regularPrice.toLocaleString()}
                         </Text>
                         <View style={styles.earlyBirdTag}>
-                          <Text style={styles.earlyBirdTagText}>Launching Offer</Text>
+                          <Text style={styles.earlyBirdTagText}>
+                            Launching Offer
+                          </Text>
                         </View>
                       </View>
                     </View>
@@ -346,7 +424,11 @@ const Subscription = () => {
                     {plan.features.map((feature, index) => (
                       <View key={index} style={styles.featureItem}>
                         <View style={styles.checkIcon}>
-                          <Ionicons name="checkmark" size={14} color="#9333ea" />
+                          <Ionicons
+                            name="checkmark"
+                            size={14}
+                            color="#9333ea"
+                          />
                         </View>
                         <Text style={styles.featureText}>{feature}</Text>
                       </View>
@@ -868,10 +950,12 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 8,
+    marginTop: 35,
   },
   webViewTitle: {
     fontSize: 18,
     fontWeight: "700",
+    marginTop: 35,
     color: "#1e293b",
   },
   webViewLoading: {
@@ -883,6 +967,40 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#ffffff",
+  },
+  activeSubscriptionCard: {
+    backgroundColor: "#f0fdf4",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+    borderWidth: 2,
+    borderColor: "#22c55e",
+  },
+  activeSubscriptionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  activeSubscriptionIcon: {
+    marginRight: 16,
+  },
+  activeSubscriptionInfo: {
+    flex: 1,
+  },
+  activeSubscriptionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#15803d",
+    marginBottom: 4,
+  },
+  activeSubscriptionPlan: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#1e293b",
+    marginBottom: 4,
+  },
+  activeSubscriptionDate: {
+    fontSize: 14,
+    color: "#64748b",
   },
 });
 
