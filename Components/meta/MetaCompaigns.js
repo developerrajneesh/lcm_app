@@ -309,73 +309,143 @@ export default function MetaCompaigns() {
     );
   };
 
-  const renderCampaignItem = ({ item }) => {
+  const renderCampaignItem = ({ item, index }) => {
     const status = item.effectiveStatus || item.status;
     const statusColor = getStatusColor(status);
     const statusText = getStatusText(status);
     const isPaused = status === "paused" || status === "campaign_paused";
 
-    return (
-      <View style={styles.campaignCard}>
-        <View style={styles.campaignHeader}>
-          <View style={styles.campaignNameContainer}>
-            <Text style={styles.campaignName}>{item.name}</Text>
-            <Text style={styles.campaignObjective}>{item.objective || "N/A"}</Text>
-          </View>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: statusColor },
-            ]}
-          >
-            <Text style={styles.statusText}>{statusText}</Text>
-          </View>
-        </View>
+    // Colorful gradient backgrounds matching web design
+    const gradients = [
+      { from: "#9333EA", to: "#EC4899" }, // purple to pink
+      { from: "#3B82F6", to: "#06B6D4" }, // blue to cyan
+      { from: "#10B981", to: "#059669" }, // green to emerald
+      { from: "#F97316", to: "#EF4444" }, // orange to red
+      { from: "#6366F1", to: "#9333EA" }, // indigo to purple
+      { from: "#14B8A6", to: "#3B82F6" }, // teal to blue
+      { from: "#EAB308", to: "#F97316" }, // yellow to orange
+      { from: "#EC4899", to: "#F43F5E" }, // pink to rose
+    ];
+    const gradient = gradients[index % gradients.length];
 
-        <View style={styles.campaignActions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => router.push({
-              pathname: "/AdSetsScreen",
-              params: { campaignId: item.id, campaignName: item.name }
-            })}
-          >
-            <Ionicons name="layers-outline" size={18} color="#1877F2" />
-            <Text style={[styles.actionText, { color: "#1877F2" }]}>
-              View Ad Sets
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handlePauseResume(item.id, status)}
-          >
-            <MaterialCommunityIcons
-              name={isPaused ? "play" : "pause"}
-              size={18}
-              color={isPaused ? "#4CAF50" : "#FF9800"}
-            />
-            <Text
+    return (
+      <TouchableOpacity
+        style={[
+          styles.campaignCard,
+          {
+            backgroundColor: gradient.from,
+          },
+        ]}
+        onPress={() => router.push({
+          pathname: "/AdSetsScreen",
+          params: { campaignId: item.id, campaignName: item.name }
+        })}
+        activeOpacity={0.9}
+      >
+        {/* Gradient overlay effect */}
+        <View
+          style={[
+            styles.gradientOverlay,
+            {
+              backgroundColor: gradient.to,
+              opacity: 0.3,
+            },
+          ]}
+        />
+        {/* Decorative circles */}
+        <View style={styles.decorativeCircle1} />
+        <View style={styles.decorativeCircle2} />
+        
+        <View style={styles.campaignContent}>
+          <View style={styles.campaignHeader}>
+            <View style={styles.campaignNameContainer}>
+              <Text style={styles.campaignName} numberOfLines={2}>
+                {item.name}
+              </Text>
+              <Text style={styles.campaignObjective}>
+                Objective: {item.objective || "N/A"}
+              </Text>
+              <Text style={styles.campaignId}>ID: {item.id}</Text>
+            </View>
+            <View
               style={[
-                styles.actionText,
+                styles.statusBadge,
                 {
-                  color: isPaused ? "#4CAF50" : "#FF9800",
+                  backgroundColor:
+                    statusText === "ACTIVE"
+                      ? "#D1FAE5"
+                      : statusText === "PAUSED"
+                      ? "#FEF3C7"
+                      : "#F3F4F6",
                 },
               ]}
             >
-              {isPaused ? "Resume" : "Pause"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handleDelete(item.id, item.name)}
-          >
-            <Ionicons name="trash-outline" size={18} color="#E53935" />
-            <Text style={[styles.actionText, { color: "#E53935" }]}>
-              Delete
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.statusText,
+                  {
+                    color:
+                      statusText === "ACTIVE"
+                        ? "#065F46"
+                        : statusText === "PAUSED"
+                        ? "#92400E"
+                        : "#374151",
+                  },
+                ]}
+              >
+                {statusText}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.campaignActions}>
+            <View style={styles.actionButtonsContainer}>
+              {isPaused ? (
+                <TouchableOpacity
+                  style={styles.actionIconButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handlePauseResume(item.id, status);
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="play"
+                    size={20}
+                    color="#059669"
+                  />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.actionIconButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handlePauseResume(item.id, status);
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="pause"
+                    size={20}
+                    color="#F59E0B"
+                  />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.actionIconButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleDelete(item.id, item.name);
+                }}
+              >
+                <Ionicons name="trash-outline" size={20} color="#DC2626" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.viewAdSetsContainer}>
+              <Text style={styles.viewAdSetsText}>View AdSets</Text>
+              <Ionicons name="chevron-forward" size={20} color="white" />
+            </View>
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -470,7 +540,7 @@ export default function MetaCompaigns() {
       ) : (
         <FlatList
           data={filteredCampaigns}
-          renderItem={renderCampaignItem}
+          renderItem={({ item, index }) => renderCampaignItem({ item, index })}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           refreshControl={
@@ -614,20 +684,50 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   campaignCard: {
-    backgroundColor: "white",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    marginHorizontal: 2,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 3,
-    borderWidth: 1,
-    borderColor: "#f0f0f0",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  decorativeCircle1: {
+    position: "absolute",
+    top: -40,
+    right: -40,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  decorativeCircle2: {
+    position: "absolute",
+    bottom: -30,
+    left: -30,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  gradientOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderBottomRightRadius: 16,
+  },
+  campaignContent: {
+    position: "relative",
+    zIndex: 10,
   },
   campaignHeader: {
     flexDirection: "row",
@@ -642,13 +742,18 @@ const styles = StyleSheet.create({
   campaignName: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#1a1a1a",
+    color: "white",
     marginBottom: 6,
   },
   campaignObjective: {
     fontSize: 14,
-    color: "#666",
+    color: "rgba(255, 255, 255, 0.9)",
     fontWeight: "500",
+    marginBottom: 4,
+  },
+  campaignId: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.75)",
   },
   statusBadge: {
     paddingHorizontal: 12,
@@ -658,7 +763,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   statusText: {
-    color: "white",
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.5,
@@ -666,21 +770,40 @@ const styles = StyleSheet.create({
   campaignActions: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    paddingTop: 12,
+    borderTopColor: "rgba(255, 255, 255, 0.2)",
+    paddingTop: 16,
+    marginTop: 16,
   },
-  actionButton: {
+  actionButtonsContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  actionIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  viewAdSetsContainer: {
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
-    justifyContent: "center",
-    paddingVertical: 8,
-    marginHorizontal: 2,
+    gap: 4,
   },
-  actionText: {
-    marginLeft: 6,
-    fontSize: 13,
+  viewAdSetsText: {
+    color: "white",
+    fontSize: 14,
     fontWeight: "600",
   },
   emptyState: {

@@ -52,11 +52,20 @@ export default function MetaConnectScreen({ onSuccess }) {
         );
 
         if (validAccounts.length === 0) {
-          Alert.alert(
-            "No Ad Accounts",
-            "No valid ad accounts found. Please make sure you have ad accounts in your Meta Business Manager."
-          );
+          // Clear the token since user has no ad accounts
+          await AsyncStorage.removeItem("fb_access_token");
+          await AsyncStorage.removeItem("fb_token");
+          await AsyncStorage.removeItem("fb_ad_account_id");
+          await AsyncStorage.removeItem("act_ad_account_id");
           setIsConnecting(false);
+          Alert.alert(
+            "No Ad Account Found",
+            "You don't have any Meta ad accounts. Please create an ad account in Meta Business Manager first, then reconnect with LCM.\n\n" +
+            "Steps:\n" +
+            "1. Go to Meta Business Manager (business.facebook.com)\n" +
+            "2. Create an ad account\n" +
+            "3. Come back here and reconnect your Meta account"
+          );
           return;
         }
 

@@ -211,7 +211,7 @@ export default function AdsScreen() {
     return `${parseFloat(value).toFixed(2)}%`;
   };
 
-  const renderAdItem = ({ item }) => {
+  const renderAdItem = ({ item, index }) => {
     const status = item.status || "";
     const statusColor = getStatusColor(status);
     const statusText = getStatusText(status);
@@ -221,93 +221,165 @@ export default function AdsScreen() {
       status === "ad_paused";
     const insights = adInsights[item.id];
 
+    // Colorful gradient backgrounds matching web design
+    const gradients = [
+      { from: "#9333EA", to: "#EC4899" }, // purple to pink
+      { from: "#3B82F6", to: "#06B6D4" }, // blue to cyan
+      { from: "#10B981", to: "#059669" }, // green to emerald
+      { from: "#F97316", to: "#EF4444" }, // orange to red
+      { from: "#6366F1", to: "#9333EA" }, // indigo to purple
+      { from: "#14B8A6", to: "#3B82F6" }, // teal to blue
+      { from: "#EAB308", to: "#F97316" }, // yellow to orange
+      { from: "#EC4899", to: "#F43F5E" }, // pink to rose
+    ];
+    const gradient = gradients[index % gradients.length];
+
     return (
-      <View style={styles.adCard}>
-        <View style={styles.adHeader}>
-          <View style={styles.adHeaderLeft}>
-            <Text style={styles.adName}>{item.name || "Unnamed Ad"}</Text>
-            <View
-              style={[styles.statusBadge, { backgroundColor: statusColor }]}
-            >
-              <Text style={styles.statusText}>{statusText}</Text>
+      <View
+        style={[
+          styles.adCard,
+          {
+            backgroundColor: gradient.from,
+          },
+        ]}
+      >
+        {/* Gradient overlay effect */}
+        <View
+          style={[
+            styles.gradientOverlay,
+            {
+              backgroundColor: gradient.to,
+              opacity: 0.3,
+            },
+          ]}
+        />
+        {/* Decorative circles */}
+        <View style={styles.decorativeCircle1} />
+        <View style={styles.decorativeCircle2} />
+        
+        <View style={styles.adContent}>
+          <View style={styles.adHeader}>
+            <View style={styles.adHeaderLeft}>
+              <View style={styles.adNameContainer}>
+                <Text style={styles.adName} numberOfLines={2}>
+                  {item.name || "Unnamed Ad"}
+                </Text>
+                <Text style={styles.adId}>ID: {item.id}</Text>
+                {item.effective_status && (
+                  <Text style={styles.adStatusText}>
+                    Status: {item.effective_status}
+                  </Text>
+                )}
+              </View>
+              <View
+                style={[
+                  styles.statusBadge,
+                  {
+                    backgroundColor:
+                      statusText === "ACTIVE"
+                        ? "#D1FAE5"
+                        : statusText === "PAUSED"
+                        ? "#FEF3C7"
+                        : "#F3F4F6",
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.statusText,
+                    {
+                      color:
+                        statusText === "ACTIVE"
+                          ? "#065F46"
+                          : statusText === "PAUSED"
+                          ? "#92400E"
+                          : "#374151",
+                    },
+                  ]}
+                >
+                  {statusText}
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* Analytics Section */}
-        {insights ? (
+          {/* Analytics Section */}
           <View style={styles.analyticsSection}>
             <Text style={styles.analyticsTitle}>Analytics (Last 30 Days)</Text>
-            <View style={styles.analyticsGrid}>
-              <View style={styles.analyticsItem}>
-                <Text style={styles.analyticsLabel}>Impressions</Text>
-                <Text style={styles.analyticsValue}>
-                  {formatNumber(insights.impressions)}
-                </Text>
-              </View>
-              <View style={styles.analyticsItem}>
-                <Text style={styles.analyticsLabel}>Clicks</Text>
-                <Text style={styles.analyticsValue}>
-                  {formatNumber(insights.clicks)}
-                </Text>
-              </View>
-              <View style={styles.analyticsItem}>
-                <Text style={styles.analyticsLabel}>CTR</Text>
-                <Text style={styles.analyticsValue}>
-                  {insights.ctr ? formatPercent(insights.ctr) : "0%"}
-                </Text>
-              </View>
-              <View style={styles.analyticsItem}>
-                <Text style={styles.analyticsLabel}>Spend</Text>
-                <Text style={styles.analyticsValue}>
-                  {formatCurrency(insights.spend)}
-                </Text>
-              </View>
-              {insights.reach && (
+            {insights ? (
+              <View style={styles.analyticsGrid}>
                 <View style={styles.analyticsItem}>
-                  <Text style={styles.analyticsLabel}>Reach</Text>
+                  <Text style={styles.analyticsLabel}>Impressions</Text>
                   <Text style={styles.analyticsValue}>
-                    {formatNumber(insights.reach)}
+                    {formatNumber(insights.impressions)}
                   </Text>
                 </View>
-              )}
-              {insights.cpc && (
                 <View style={styles.analyticsItem}>
-                  <Text style={styles.analyticsLabel}>CPC</Text>
+                  <Text style={styles.analyticsLabel}>Clicks</Text>
                   <Text style={styles.analyticsValue}>
-                    {formatCurrency(insights.cpc)}
+                    {formatNumber(insights.clicks)}
                   </Text>
                 </View>
-              )}
-            </View>
+                <View style={styles.analyticsItem}>
+                  <Text style={styles.analyticsLabel}>CTR</Text>
+                  <Text style={styles.analyticsValue}>
+                    {insights.ctr ? formatPercent(insights.ctr) : "0%"}
+                  </Text>
+                </View>
+                <View style={styles.analyticsItem}>
+                  <Text style={styles.analyticsLabel}>Spend</Text>
+                  <Text style={styles.analyticsValue}>
+                    {formatCurrency(insights.spend)}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.analyticsGrid}>
+                <View style={styles.analyticsItem}>
+                  <Text style={styles.analyticsLabel}>Impressions</Text>
+                  <Text style={styles.analyticsValue}>0</Text>
+                </View>
+                <View style={styles.analyticsItem}>
+                  <Text style={styles.analyticsLabel}>Clicks</Text>
+                  <Text style={styles.analyticsValue}>0</Text>
+                </View>
+                <View style={styles.analyticsItem}>
+                  <Text style={styles.analyticsLabel}>CTR</Text>
+                  <Text style={styles.analyticsValue}>0%</Text>
+                </View>
+                <View style={styles.analyticsItem}>
+                  <Text style={styles.analyticsLabel}>Spend</Text>
+                  <Text style={styles.analyticsValue}>₹0.00</Text>
+                </View>
+              </View>
+            )}
           </View>
-        ) : (
-          <View style={styles.noAnalytics}>
-            <Text style={styles.noAnalyticsText}>No analytics data available</Text>
-          </View>
-        )}
 
-        <View style={styles.adActions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handlePauseResume(item.id, status)}
-          >
-            <MaterialCommunityIcons
-              name={isPaused ? "play" : "pause"}
-              size={16}
-              color={isPaused ? "#4CAF50" : "#FF9800"}
-            />
-            <Text
-              style={[
-                styles.actionText,
-                {
-                  color: isPaused ? "#4CAF50" : "#FF9800",
-                },
-              ]}
-            >
-              {isPaused ? "Resume" : "Pause"}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.adActions}>
+            {isPaused ? (
+              <TouchableOpacity
+                style={styles.actionIconButton}
+                onPress={() => handlePauseResume(item.id, status)}
+              >
+                <MaterialCommunityIcons
+                  name="play"
+                  size={20}
+                  color="#059669"
+                />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.actionIconButton}
+                onPress={() => handlePauseResume(item.id, status)}
+              >
+                <MaterialCommunityIcons
+                  name="pause"
+                  size={20}
+                  color="#F59E0B"
+                />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     );
@@ -449,7 +521,7 @@ export default function AdsScreen() {
 
           <FlatList
             data={filteredAds}
-            renderItem={renderAdItem}
+            renderItem={({ item, index }) => renderAdItem({ item, index })}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
             refreshControl={
@@ -614,106 +686,148 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   adCard: {
-    backgroundColor: "white",
-    borderRadius: 12,
+    borderRadius: 16,
+    padding: 20,
     marginBottom: 16,
-    padding: 16,
+    marginHorizontal: 2,
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 2,
+      height: 4,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
-    elevation: 3,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  gradientOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderBottomRightRadius: 16,
+  },
+  decorativeCircle1: {
+    position: "absolute",
+    top: -40,
+    right: -40,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  decorativeCircle2: {
+    position: "absolute",
+    bottom: -30,
+    left: -30,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  adContent: {
+    position: "relative",
+    zIndex: 10,
   },
   adHeader: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   adHeaderLeft: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+  },
+  adNameContainer: {
+    flex: 1,
+    marginRight: 12,
   },
   adName: {
     fontSize: 18,
     fontWeight: "bold",
-    flex: 1,
-    marginRight: 8,
+    color: "white",
+    marginBottom: 6,
+  },
+  adId: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.75)",
+    marginBottom: 4,
+  },
+  adStatusText: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.75)",
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    minWidth: 70,
+    alignItems: "center",
   },
   statusText: {
-    color: "white",
-    fontSize: 12,
-    fontWeight: "bold",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
   analyticsSection: {
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
+    borderTopColor: "rgba(255, 255, 255, 0.2)",
   },
   analyticsTitle: {
     fontSize: 14,
-    fontWeight: "600",
-    color: "#1a1a1a",
+    fontWeight: "700",
+    color: "white",
     marginBottom: 12,
   },
   analyticsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
+    gap: 12,
   },
   analyticsItem: {
     width: "48%",
-    marginBottom: 12,
+    backgroundColor: "#D1F2E5",
+    borderRadius: 8,
+    padding: 8,
   },
   analyticsLabel: {
     fontSize: 12,
-    color: "#666",
+    color: "#374151",
     marginBottom: 4,
+    opacity: 0.9,
   },
   analyticsValue: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#1a1a1a",
-  },
-  noAnalytics: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-  },
-  noAnalyticsText: {
     fontSize: 14,
-    color: "#999",
-    textAlign: "center",
+    fontWeight: "bold",
+    color: "#111827",
   },
   adActions: {
     flexDirection: "row",
     justifyContent: "flex-start",
-    marginTop: 12,
-    paddingTop: 12,
+    marginTop: 16,
+    paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
+    borderTopColor: "rgba(255, 255, 255, 0.2)",
   },
-  actionButton: {
-    flexDirection: "row",
+  actionIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    backgroundColor: "#f0f2f5",
-    marginRight: 8,
-  },
-  actionText: {
-    marginLeft: 6,
-    fontSize: 14,
-    fontWeight: "500",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
   emptyState: {
     alignItems: "center",

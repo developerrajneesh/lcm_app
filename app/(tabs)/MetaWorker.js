@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useFocusEffect } from "@react-navigation/native";
+import { router } from "expo-router";
+import { View, ActivityIndicator, StyleSheet } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MetaConnectScreen from "../../Components/meta/ConnectMetaAccount";
-import MetaCompaigns from "../../Components/meta/MetaCompaigns";
+import MetaAdsScreen from "./MetaAdsScreen";
 
 const MetaWorker = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -46,13 +48,29 @@ const MetaWorker = () => {
   };
 
   if (loading) {
-    return null; // Or a loading spinner
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+      </View>
+    );
   }
 
   if (!isConnected) {
     return <MetaConnectScreen onSuccess={handleConnectionSuccess} />;
   }
-  return <MetaCompaigns />;
+  
+  // If connected, render MetaAdsScreen directly (which has tabs)
+  // MetaAdsScreen will handle its own connection check on mount
+  return <MetaAdsScreen />;
 };
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#fff",
+  },
+});
 
 export default MetaWorker;

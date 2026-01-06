@@ -28,6 +28,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import MetaConnectScreen from "../../Components/meta/ConnectMetaAccount";
 import MetaCompaigns from "../../Components/meta/MetaCompaigns";
+import AccountOverview from "../../Components/meta/AccountOverview";
 import PlacesAutocomplete from "../../Components/PlacesAutocomplete";
 import CustomSelect from "../../Components/CustomSelect";
 import { API_BASE_URL } from "../../config/api";
@@ -35,6 +36,21 @@ import { useSubscription } from "../../hooks/useSubscription";
 import { hasFeatureAccess, hasActiveSubscription } from "../../utils/subscription";
 import UpgradeModal from "../../Components/UpgradeModal";
 import NotificationBadge from "../../Components/NotificationBadge";
+// WhatsApp Components
+import WhatsAppCampaign from "../../Components/meta/WhatsApp/WhatsAppCampaign";
+import WhatsAppAdSet from "../../Components/meta/WhatsApp/WhatsAppAdSet";
+import WhatsAppAdCreative from "../../Components/meta/WhatsApp/WhatsAppAdCreative";
+import WhatsAppLaunch from "../../Components/meta/WhatsApp/WhatsAppLaunch";
+// Call Components
+import CallCampaign from "../../Components/meta/Call/CallCampaign";
+import CallAdSet from "../../Components/meta/Call/CallAdSet";
+import CallAdCreative from "../../Components/meta/Call/CallAdCreative";
+import CallLaunch from "../../Components/meta/Call/CallLaunch";
+// Link Components
+import LinkCampaign from "../../Components/meta/Link/LinkCampaign";
+import LinkAdSet from "../../Components/meta/Link/LinkAdSet";
+import LinkAdCreative from "../../Components/meta/Link/LinkAdCreative";
+import LinkLaunch from "../../Components/meta/Link/LinkLaunch";
 
 // Header Component
 const Header = ({ userId }) => (
@@ -56,6 +72,7 @@ const Header = ({ userId }) => (
 // Tab Navigation Component
 const TabNavigation = ({ activeTab, setActiveTab }) => {
   const tabs = [
+    { id: "overview", label: "Overview" },
     { id: "create", label: "Create" },
     { id: "manage", label: "Manage" },
     { id: "analytics", label: "Analytics" },
@@ -85,7 +102,7 @@ const TabNavigation = ({ activeTab, setActiveTab }) => {
 };
 
 // Section Header Component
-const SectionHeader = ({ title, step, totalSteps = 3 }) => (
+const SectionHeader = ({ title, step, totalSteps = 4 }) => (
   <View style={styles.sectionHeader}>
     <Text style={styles.sectionTitle}>{title}</Text>
     {step && (
@@ -110,6 +127,7 @@ const CampaignDetails = ({
   setDestinationType,
   whatsappNumber,
   setWhatsappNumber,
+  campaignType,
 }) => {
   const campaignObjectivesV23 = [
     { id: "OUTCOME_AWARENESS", name: "Awareness", icon: "eye", category: "Awareness" },
@@ -119,6 +137,19 @@ const CampaignDetails = ({
     { id: "OUTCOME_SALES", name: "Sales", icon: "cash", category: "Sales" },
     { id: "OUTCOME_APP_PROMOTION", name: "App Promotion", icon: "download", category: "App" },
   ];
+  
+  // Set default objective based on campaign type
+  useEffect(() => {
+    if (campaignType === "whatsapp") {
+      setObjective("OUTCOME_ENGAGEMENT");
+    } else if (campaignType === "call") {
+      setObjective("OUTCOME_TRAFFIC");
+    } else if (campaignType === "link") {
+      setObjective("OUTCOME_TRAFFIC");
+    } else if (campaignType === "lead-form") {
+      setObjective("OUTCOME_LEADS");
+    }
+  }, [campaignType, setObjective]);
   
   const objectives = campaignObjectivesV23;
 
@@ -156,32 +187,42 @@ const CampaignDetails = ({
 
       <View style={styles.inputContainer}>
         <Text style={styles.inputLabel}>Objective</Text>
-        <View style={styles.objectivesContainer}>
-          {objectives.map((obj) => (
-            <TouchableOpacity
-              key={obj.id}
-              style={[
-                styles.objectiveButton,
-                objective === obj.id && styles.selectedObjective,
-              ]}
-              onPress={() => setObjective(obj.id)}
-            >
-              <MaterialCommunityIcons
-                name={obj.icon}
-                size={20}
-                color={objective === obj.id ? "#fff" : "#1877F2"}
-              />
-              <Text
+        {campaignType === "whatsapp" ? (
+          // WhatsApp: Fixed objective (OUTCOME_ENGAGEMENT)
+          <View style={[styles.objectiveButton, styles.selectedObjective, { backgroundColor: "#9333EA" }]}>
+            <MaterialCommunityIcons name="thumb-up" size={20} color="#fff" />
+            <Text style={[styles.objectiveText, styles.selectedObjectiveText]}>
+              Engagement (OUTCOME_ENGAGEMENT)
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.objectivesContainer}>
+            {objectives.map((obj) => (
+              <TouchableOpacity
+                key={obj.id}
                 style={[
-                  styles.objectiveText,
-                  objective === obj.id && styles.selectedObjectiveText,
+                  styles.objectiveButton,
+                  objective === obj.id && styles.selectedObjective,
                 ]}
+                onPress={() => setObjective(obj.id)}
               >
-                {obj.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+                <MaterialCommunityIcons
+                  name={obj.icon}
+                  size={20}
+                  color={objective === obj.id ? "#fff" : "#1877F2"}
+                />
+                <Text
+                  style={[
+                    styles.objectiveText,
+                    objective === obj.id && styles.selectedObjectiveText,
+                  ]}
+                >
+                  {obj.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -253,6 +294,7 @@ const AdSetDetails = ({
   setDevicePlatforms,
   genders,
   setGenders,
+  campaignType, // Add campaignType prop
 }) => {
   // Get destination types based on campaign objective
   const getDestinationTypes = () => {
@@ -311,6 +353,469 @@ const AdSetDetails = ({
     { value: "VIEW_CONTENT", label: "View Content" },
   ];
 
+  // WhatsApp campaigns: Simplified form matching web version
+  if (campaignType === "whatsapp") {
+    const countries = [
+      { code: "US", name: "United States", flag: "🇺🇸" },
+      { code: "CA", name: "Canada", flag: "🇨🇦" },
+      { code: "GB", name: "United Kingdom", flag: "🇬🇧" },
+      { code: "AU", name: "Australia", flag: "🇦🇺" },
+      { code: "IN", name: "India", flag: "🇮🇳" },
+      { code: "DE", name: "Germany", flag: "🇩🇪" },
+    ];
+
+    const handleCountryToggle = (countryCode) => {
+      const currentCountries = targeting.geo_locations?.countries || [];
+      const index = currentCountries.indexOf(countryCode);
+      let newCountries;
+      if (index > -1) {
+        newCountries = currentCountries.filter(c => c !== countryCode);
+      } else {
+        newCountries = [...currentCountries, countryCode];
+      }
+      setTargeting({
+        ...targeting,
+        geo_locations: {
+          ...targeting.geo_locations,
+          countries: newCountries,
+        },
+      });
+    };
+
+    return (
+      <View style={styles.section}>
+        <SectionHeader title="Step 2: Create AdSet - WhatsApp Campaign" step={2} totalSteps={4} />
+
+        {/* AdSet Name */}
+        <View style={styles.inputContainer}>
+          <Text style={styles.inputLabel}>Ad Set Name <Text style={{ color: "#FF0000" }}>*</Text></Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter ad set name"
+            value={adSetName}
+            onChangeText={setAdSetName}
+          />
+        </View>
+
+        {/* Page ID and Daily Budget in a row */}
+        <View style={{ flexDirection: "row", gap: 15 }}>
+          <View style={[styles.inputContainer, { flex: 1 }]}>
+            <Text style={styles.inputLabel}>Page ID <Text style={{ color: "#FF0000" }}>*</Text></Text>
+            {loadingPages ? (
+              <View style={[styles.input, { backgroundColor: "#F5F5F5" }]}>
+                <Text style={{ color: "#999" }}>Loading pages...</Text>
+              </View>
+            ) : pages.length > 0 ? (
+              <CustomSelect
+                label=""
+                data={pages && Array.isArray(pages) && pages.length > 0 ? pages : []}
+                onSelect={(selectedItem) => {
+                  setPageId(selectedItem.id);
+                }}
+                placeholder="Select a Facebook Page"
+                buttonTextAfterSelection={(selectedItem) => {
+                  return `${selectedItem.name} (${selectedItem.id})`;
+                }}
+                rowTextForSelection={(item) => {
+                  return `${item.name} (${item.id})`;
+                }}
+                defaultValue={pages && Array.isArray(pages) ? pages.find((p) => p.id === pageId) : null}
+                disabled={!pages || !Array.isArray(pages) || pages.length === 0}
+                buttonStyle={{ height: 48, backgroundColor: "#fff", borderRadius: 8, borderWidth: 1, borderColor: "#D8DEE6", paddingHorizontal: 14 }}
+                buttonTextStyle={{ fontSize: 16, color: !pageId ? "#8B9DC3" : "#1C1E21", textAlign: "left" }}
+                hint={
+                  (!pages || !Array.isArray(pages) || pages.length === 0)
+                    ? "No pages found. Make sure your Facebook account has pages."
+                    : undefined
+                }
+              />
+            ) : (
+              <TextInput
+                style={styles.input}
+                placeholder="Enter Facebook Page ID"
+                value={pageId}
+                onChangeText={setPageId}
+              />
+            )}
+          </View>
+          <View style={[styles.inputContainer, { flex: 1 }]}>
+            <Text style={styles.inputLabel}>Daily Budget <Text style={{ color: "#FF0000" }}>*</Text></Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter daily budget"
+              keyboardType="numeric"
+              value={budget}
+              onChangeText={setBudget}
+            />
+          </View>
+        </View>
+
+        {/* Targeting Section */}
+        <View style={{ marginTop: 20, borderTopWidth: 1, borderTopColor: "#E4E6EB", paddingTop: 20 }}>
+          <Text style={[styles.inputLabel, { fontSize: 18, marginBottom: 15 }]}>Targeting</Text>
+
+          {/* Google Places Autocomplete */}
+          <View style={[styles.inputContainer, { backgroundColor: "#E3F2FD", padding: 15, borderRadius: 8, marginBottom: 15 }]}>
+            <Text style={styles.inputLabel}>Search Location *</Text>
+            <Text style={[styles.inputHint, { marginBottom: 10 }]}>
+              Search for a location using Google Places. You can add multiple locations - each will be automatically added to custom_locations for targeting.
+            </Text>
+            <PlacesAutocomplete
+              value=""
+              onChange={() => {}}
+              onPlaceSelect={handlePlaceSelect}
+              placeholder="Search for a location (e.g., city, address, landmark)"
+            />
+          </View>
+
+          {/* Display Selected Place Preview */}
+          {selectedPlace && (
+            <View style={[styles.inputContainer, { backgroundColor: "#E8F5E9", padding: 12, borderRadius: 8, marginBottom: 15 }]}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                <Text style={[styles.inputLabel, { fontSize: 14 }]}>Preview:</Text>
+                <TouchableOpacity onPress={() => setSelectedPlace(null)}>
+                  <MaterialCommunityIcons name="close" size={20} color="#606770" />
+                </TouchableOpacity>
+              </View>
+              {selectedPlace.name && (
+                <Text style={styles.inputHint}><Text style={{ fontWeight: "600" }}>Name:</Text> {selectedPlace.name}</Text>
+              )}
+              {selectedPlace.address && (
+                <Text style={styles.inputHint}><Text style={{ fontWeight: "600" }}>Address:</Text> {selectedPlace.address}</Text>
+              )}
+              {selectedPlace.location && (
+                <Text style={[styles.inputHint, { fontSize: 11 }]}>
+                  <Text style={{ fontWeight: "600" }}>Coordinates:</Text> {selectedPlace.location.lat.toFixed(6)}, {selectedPlace.location.lng.toFixed(6)}
+                </Text>
+              )}
+            </View>
+          )}
+
+          {/* Display All Custom Locations */}
+          {customLocations.length > 0 && (
+            <View style={[styles.inputContainer, { backgroundColor: "#E3F2FD", padding: 15, borderRadius: 8, marginBottom: 15 }]}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <Text style={[styles.inputLabel, { fontSize: 14 }]}>Custom Locations ({customLocations.length})</Text>
+                <TouchableOpacity onPress={() => { setCustomLocations([]); setSelectedPlace(null); }}>
+                  <Text style={{ color: "#E53935", fontSize: 12, fontWeight: "600" }}>Clear All</Text>
+                </TouchableOpacity>
+              </View>
+              {customLocations.map((loc, idx) => (
+                <View key={idx} style={{ backgroundColor: "#fff", padding: 12, borderRadius: 8, marginBottom: 10 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      {loc.name && <Text style={[styles.inputLabel, { fontSize: 13, marginBottom: 4 }]}>{loc.name}</Text>}
+                      {loc.address && <Text style={[styles.inputHint, { fontSize: 11, marginBottom: 4 }]}>{loc.address}</Text>}
+                      <Text style={[styles.inputHint, { fontSize: 10, fontFamily: "monospace" }]}>
+                        Lat: {loc.latitude.toFixed(6)}, Lng: {loc.longitude.toFixed(6)}
+                      </Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setCustomLocations(customLocations.filter((_, i) => i !== idx))}>
+                      <MaterialCommunityIcons name="close" size={18} color="#606770" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={[styles.inputHint, { fontSize: 12 }]}>Radius:</Text>
+                    <TextInput
+                      style={[styles.input, { width: 60, paddingVertical: 6, paddingHorizontal: 8, fontSize: 12 }]}
+                      value={loc.radius.toString()}
+                      onChangeText={(text) => {
+                        const newLocations = [...customLocations];
+                        const newRadius = parseInt(text);
+                        if (!isNaN(newRadius)) {
+                          if (newRadius < 2) newLocations[idx].radius = 2;
+                          else if (newRadius > 17) newLocations[idx].radius = 17;
+                          else newLocations[idx].radius = newRadius;
+                        } else {
+                          newLocations[idx].radius = 5;
+                        }
+                        setCustomLocations(newLocations);
+                      }}
+                      keyboardType="numeric"
+                    />
+                    <Text style={[styles.inputHint, { fontSize: 12 }]}>km</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {/* Age Range */}
+          <View style={{ flexDirection: "row", gap: 15 }}>
+            <View style={[styles.inputContainer, { flex: 1 }]}>
+              <Text style={styles.inputLabel}>Min Age <Text style={{ color: "#FF0000" }}>*</Text></Text>
+              <TextInput
+                style={styles.input}
+                keyboardType="numeric"
+                value={targeting.ageMin?.toString() || "18"}
+                onChangeText={(text) => setTargeting({ ...targeting, ageMin: parseInt(text) || 18 })}
+              />
+            </View>
+            <View style={[styles.inputContainer, { flex: 1 }]}>
+              <Text style={styles.inputLabel}>Max Age <Text style={{ color: "#FF0000" }}>*</Text></Text>
+              <TextInput
+                style={styles.input}
+                keyboardType="numeric"
+                value={targeting.ageMax?.toString() || "45"}
+                onChangeText={(text) => setTargeting({ ...targeting, ageMax: parseInt(text) || 45 })}
+              />
+            </View>
+          </View>
+
+          {/* Genders (Optional) */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Genders (Optional)</Text>
+            <View style={{ flexDirection: "row", gap: 15, marginTop: 8 }}>
+              {[
+                { value: 1, label: "Male" },
+                { value: 2, label: "Female" },
+              ].map((gender) => (
+                <TouchableOpacity
+                  key={gender.value}
+                  style={[
+                    styles.checkboxContainer,
+                    genders.includes(gender.value) && styles.checkboxContainerSelected,
+                  ]}
+                  onPress={() => {
+                    if (genders.includes(gender.value)) {
+                      setGenders(genders.filter(g => g !== gender.value));
+                    } else {
+                      setGenders([...genders, gender.value]);
+                    }
+                  }}
+                >
+                  <View style={[
+                    styles.checkbox,
+                    genders.includes(gender.value) && styles.checkboxSelected,
+                  ]}>
+                    {genders.includes(gender.value) && (
+                      <MaterialCommunityIcons name="check" size={16} color="#fff" />
+                    )}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{gender.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.inputHint}>Leave empty to target all genders</Text>
+          </View>
+
+          {/* Countries */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Countries <Text style={{ color: "#FF0000" }}>*</Text></Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+              {countries.map((country) => (
+                <TouchableOpacity
+                  key={country.code}
+                  onPress={() => handleCountryToggle(country.code)}
+                  style={[
+                    {
+                      padding: 12,
+                      borderRadius: 8,
+                      borderWidth: 2,
+                      minWidth: 100,
+                      alignItems: "center",
+                    },
+                    (targeting.geo_locations?.countries || []).includes(country.code)
+                      ? { borderColor: "#9333EA", backgroundColor: "#F3E8FF" }
+                      : { borderColor: "#D8DEE6", backgroundColor: "#fff" },
+                  ]}
+                >
+                  <Text style={{ fontSize: 20, marginBottom: 4 }}>{country.flag}</Text>
+                  <Text style={{ fontSize: 12, fontWeight: "500" }}>{country.name}</Text>
+                  {(targeting.geo_locations?.countries || []).includes(country.code) && (
+                    <MaterialCommunityIcons name="check" size={16} color="#9333EA" style={{ marginTop: 4 }} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Publisher Platforms */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Publisher Platforms <Text style={{ color: "#FF0000" }}>*</Text></Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+              {[
+                { value: "facebook", label: "Facebook", icon: "facebook" },
+                { value: "instagram", label: "Instagram", icon: "instagram" },
+                { value: "messenger", label: "Messenger", icon: "facebook-messenger" },
+                { value: "audience_network", label: "Audience Network", icon: "web" },
+              ].map((publisher) => (
+                <TouchableOpacity
+                  key={publisher.value}
+                  onPress={() => {
+                    if (publisherPlatforms.includes(publisher.value)) {
+                      setPublisherPlatforms(publisherPlatforms.filter(p => p !== publisher.value));
+                    } else {
+                      setPublisherPlatforms([...publisherPlatforms, publisher.value]);
+                    }
+                  }}
+                  style={[
+                    {
+                      padding: 12,
+                      borderRadius: 8,
+                      borderWidth: 2,
+                      minWidth: 100,
+                      alignItems: "center",
+                      flexDirection: "row",
+                      gap: 8,
+                    },
+                    publisherPlatforms.includes(publisher.value)
+                      ? { borderColor: "#9333EA", backgroundColor: "#F3E8FF" }
+                      : { borderColor: "#D8DEE6", backgroundColor: "#fff" },
+                  ]}
+                >
+                  <MaterialCommunityIcons
+                    name={publisher.icon}
+                    size={20}
+                    color={publisherPlatforms.includes(publisher.value) ? "#9333EA" : "#606770"}
+                  />
+                  <Text style={{ fontSize: 12, fontWeight: "500" }}>{publisher.label}</Text>
+                  {publisherPlatforms.includes(publisher.value) && (
+                    <MaterialCommunityIcons name="check" size={16} color="#9333EA" />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {/* Facebook Positions (Optional) */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Facebook Positions (Optional)</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+              {[
+                { value: "feed", label: "Feed" },
+                { value: "instant_article", label: "Instant Article" },
+              ].map((position) => (
+                <TouchableOpacity
+                  key={position.value}
+                  onPress={() => {
+                    if (facebookPositions.includes(position.value)) {
+                      setFacebookPositions(facebookPositions.filter(p => p !== position.value));
+                    } else {
+                      setFacebookPositions([...facebookPositions, position.value]);
+                    }
+                  }}
+                  style={[
+                    {
+                      padding: 12,
+                      borderRadius: 8,
+                      borderWidth: 2,
+                      minWidth: 100,
+                      alignItems: "center",
+                    },
+                    facebookPositions.includes(position.value)
+                      ? { borderColor: "#9333EA", backgroundColor: "#F3E8FF" }
+                      : { borderColor: "#D8DEE6", backgroundColor: "#fff" },
+                  ]}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: "500" }}>{position.label}</Text>
+                  {facebookPositions.includes(position.value) && (
+                    <MaterialCommunityIcons name="check" size={16} color="#9333EA" style={{ marginTop: 4 }} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.inputHint}>Leave empty to use all positions</Text>
+          </View>
+
+          {/* Instagram Positions (Optional) */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Instagram Positions (Optional)</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+              {[
+                { value: "stream", label: "Feed" },
+                { value: "reels", label: "Reels" },
+                { value: "story", label: "Story" },
+                { value: "explore", label: "Explore" },
+              ].map((position) => (
+                <TouchableOpacity
+                  key={position.value}
+                  onPress={() => {
+                    let newPositions = [...instagramPositions];
+                    const index = newPositions.indexOf(position.value);
+                    if (index > -1) {
+                      newPositions.splice(index, 1);
+                      // If removing stream and explore is still selected, remove explore too
+                      if (position.value === 'stream' && newPositions.includes('explore')) {
+                        const exploreIndex = newPositions.indexOf('explore');
+                        if (exploreIndex > -1) {
+                          newPositions.splice(exploreIndex, 1);
+                        }
+                      }
+                    } else {
+                      newPositions.push(position.value);
+                      // If selecting explore, automatically add stream (feed) as it's required
+                      if (position.value === 'explore' && !newPositions.includes('stream')) {
+                        newPositions.push('stream');
+                      }
+                    }
+                    setInstagramPositions(newPositions);
+                  }}
+                  style={[
+                    {
+                      padding: 12,
+                      borderRadius: 8,
+                      borderWidth: 2,
+                      minWidth: 100,
+                      alignItems: "center",
+                    },
+                    instagramPositions.includes(position.value)
+                      ? { borderColor: "#9333EA", backgroundColor: "#F3E8FF" }
+                      : { borderColor: "#D8DEE6", backgroundColor: "#fff" },
+                  ]}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: "500" }}>{position.label}</Text>
+                  {instagramPositions.includes(position.value) && (
+                    <MaterialCommunityIcons name="check" size={16} color="#9333EA" style={{ marginTop: 4 }} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.inputHint}>Leave empty to use all positions</Text>
+          </View>
+
+          {/* Device Platforms (Optional) */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.inputLabel}>Device Platforms (Optional)</Text>
+            <View style={{ flexDirection: "row", gap: 15, marginTop: 8 }}>
+              {[
+                { value: "mobile", label: "Mobile" },
+                { value: "desktop", label: "Desktop" },
+              ].map((device) => (
+                <TouchableOpacity
+                  key={device.value}
+                  style={[
+                    styles.checkboxContainer,
+                    devicePlatforms.includes(device.value) && styles.checkboxContainerSelected,
+                  ]}
+                  onPress={() => {
+                    if (devicePlatforms.includes(device.value)) {
+                      setDevicePlatforms(devicePlatforms.filter(d => d !== device.value));
+                    } else {
+                      setDevicePlatforms([...devicePlatforms, device.value]);
+                    }
+                  }}
+                >
+                  <View style={[
+                    styles.checkbox,
+                    devicePlatforms.includes(device.value) && styles.checkboxSelected,
+                  ]}>
+                    {devicePlatforms.includes(device.value) && (
+                      <MaterialCommunityIcons name="check" size={16} color="#fff" />
+                    )}
+                  </View>
+                  <Text style={styles.checkboxLabel}>{device.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.inputHint}>Leave empty to target all devices</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // Default AdSet form for other campaign types (Call, Link, etc.)
   return (
     <View style={styles.section}>
       <SectionHeader title="Step 2: Create AdSet" step={2} />
@@ -1453,10 +1958,17 @@ const EmptyState = ({ icon, title, text, buttonText, onButtonPress }) => (
 const MetaAdsScreen = () => {
   const params = useLocalSearchParams();
   
-  // Step management
-  const [step, setStep] = useState(params.step ? parseInt(params.step) : 1); // 1: Campaign, 2: AdSet, 3: Ad
+  // Campaign type selection (step 0)
+  const [campaignType, setCampaignType] = useState(null); // "whatsapp", "call", "link", "lead-form"
+  
+  // Step management - matching web flow: 0: Campaign Type Selection, 1: Campaign, 2: AdSet, 3: AdCreative, 4: Ad
+  const [step, setStep] = useState(params.step ? parseInt(params.step) : 0);
   const [createdCampaignId, setCreatedCampaignId] = useState(params.campaignId || null);
   const [createdAdSetId, setCreatedAdSetId] = useState(params.adsetId || null);
+  const [createdCreativeId, setCreatedCreativeId] = useState(null);
+  
+  // Campaign data to pass between components
+  const [campaignData, setCampaignData] = useState({});
   
   // Set step and IDs from params if provided
   useEffect(() => {
@@ -1542,7 +2054,14 @@ const MetaAdsScreen = () => {
     mediaUrl: null,
   });
   
-  // Ad Creation (Step 3)
+  // AdCreative Details (Step 3) - matching web flow
+  const [creativeName, setCreativeName] = useState("");
+  const [creativePageId, setCreativePageId] = useState("");
+  const [pictureUrl, setPictureUrl] = useState("");
+  const [businessPageUrl, setBusinessPageUrl] = useState("");
+  const [creativePhoneNumber, setCreativePhoneNumber] = useState("");
+  
+  // Ad Creation (Step 4) - updated from step 3
   const [adName, setAdName] = useState("");
   const [callToActionType, setCallToActionType] = useState("LEARN_MORE");
   const [allowedCTAs, setAllowedCTAs] = useState([]);
@@ -1562,7 +2081,7 @@ const MetaAdsScreen = () => {
   const [accessToken, setAccessToken] = useState("");
   const [adAccountId, setAdAccountId] = useState("");
   const [adAccounts, setAdAccounts] = useState([]);
-  const [activeTab, setActiveTab] = useState("create");
+  const [activeTab, setActiveTab] = useState("overview");
   const [isLoading, setIsLoading] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   
@@ -2088,18 +2607,40 @@ const MetaAdsScreen = () => {
         },
       });
       if (response.data.success && response.data.adAccounts?.data) {
-        setAdAccounts(response.data.adAccounts.data);
-        if (response.data.adAccounts.data.length === 1) {
-          const accountId = response.data.adAccounts.data[0].id;
+        const accounts = response.data.adAccounts.data.filter(
+          account => account && account.id && typeof account.id === 'string' && account.id.trim() !== ''
+        );
+        
+        if (accounts.length === 0) {
+          // No valid ad accounts found - clear connection
+          await AsyncStorage.removeItem("fb_access_token");
+          await AsyncStorage.removeItem("fb_token");
+          await AsyncStorage.removeItem("fb_ad_account_id");
+          await AsyncStorage.removeItem("act_ad_account_id");
+          setAccessToken("");
+          setAdAccountId("");
+          setAdAccounts([]);
+          setIsConnected(false);
+          Alert.alert(
+            "No Ad Account Found",
+            "You don't have any Meta ad accounts. Please create an ad account in Meta Business Manager first, then reconnect with LCM.\n\n" +
+            "Steps:\n" +
+            "1. Go to Meta Business Manager (business.facebook.com)\n" +
+            "2. Create an ad account\n" +
+            "3. Come back here and reconnect your Meta account"
+          );
+          return;
+        }
+        
+        setAdAccounts(accounts);
+        if (accounts.length === 1) {
+          const accountId = accounts[0].id;
           setAdAccountId(accountId);
           await AsyncStorage.setItem("fb_ad_account_id", accountId);
           setIsConnected(true);
-        } else if (response.data.adAccounts.data.length > 1) {
+        } else if (accounts.length > 1) {
           setIsConnected(true);
           setShowAccountModal(true);
-        } else {
-          // No accounts found but token exists - still show dashboard
-          setIsConnected(true);
         }
       }
     } catch (error) {
@@ -2434,27 +2975,60 @@ const MetaAdsScreen = () => {
     setIsLoading(true);
 
     try {
+      // Use same API endpoint and payload structure as web version
+      const campaignPayload = {
+        name: campaignName,
+        objective: objective,
+        special_ad_categories: ["NONE"],
+        status: "PAUSED",
+      };
+
+      // Determine API endpoint based on campaign type
+      let campaignEndpoint;
+      if (campaignType === "whatsapp") {
+        campaignEndpoint = `${API_BASE_URL}/click-to-whatsapp/campaigns`;
+      } else if (campaignType === "call") {
+        campaignEndpoint = `${API_BASE_URL}/click-to-call/campaigns`;
+      } else if (campaignType === "link") {
+        campaignEndpoint = `${API_BASE_URL}/click-to-link/campaigns`;
+      } else {
+        Alert.alert("Error", "Please select a campaign type first");
+        setIsLoading(false);
+        return;
+      }
+
+      console.log("📤 Creating campaign:", {
+        endpoint: campaignEndpoint,
+        payload: campaignPayload,
+        campaignType,
+      });
+
       const campaignResponse = await axios.post(
-        `${API_BASE_URL}/campaigns`,
-        {
-          adAccountId,
-          name: campaignName,
-          objective: objective,
-          status: "PAUSED",
-          special_ad_categories: [],
-        },
+        campaignEndpoint,
+        campaignPayload,
         {
           headers: {
-            "x-fb-access-token": accessToken,
+            "Content-Type": "application/json",
+            "act_ad_account_id": adAccountId,
+            "fb_token": accessToken,
           },
         }
       );
 
+      console.log("📥 Campaign response:", campaignResponse.data);
+
+      // Backend returns: { success: true, data: { id: "...", ... } }
       if (!campaignResponse.data.success) {
-        throw new Error(campaignResponse.data.message || "Failed to create campaign");
+        throw new Error(campaignResponse.data.error || campaignResponse.data.message || "Failed to create campaign");
       }
 
-      const campaignId = campaignResponse.data.campaign.id;
+      // Extract campaign ID from response.data.data.id
+      const campaignId = campaignResponse.data.data?.id;
+      if (!campaignId) {
+        console.error("Campaign response structure:", campaignResponse.data);
+        throw new Error("Campaign ID not found in response");
+      }
+
       setCreatedCampaignId(campaignId);
       setCampaignObjective(objective);
       setAdSetName(`${campaignName} - AdSet`);
@@ -2471,13 +3045,28 @@ const MetaAdsScreen = () => {
       });
       
       if (!wasTokenExpired) {
-        Alert.alert(
-          "Error",
-          error.response?.data?.fb?.message ||
-            error.response?.data?.message ||
-            error.message ||
-            "Failed to create campaign. Please try again."
-        );
+        // Better error message for 404
+        let errorMessage = error.message || "Failed to create campaign. Please try again.";
+        
+        if (error.response?.status === 404) {
+          errorMessage = `Endpoint not found (404): ${error.config?.url}\n\nThis usually means:\n1. Backend route not registered\n2. Wrong API base URL\n3. Backend server not running\n\nCurrent API_BASE_URL: ${API_BASE_URL}`;
+        } else if (error.response?.data) {
+          errorMessage = error.response.data.error || 
+                        error.response.data.message || 
+                        error.response.data.fb?.message ||
+                        errorMessage;
+        }
+        
+        console.error("Full error details:", {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          url: error.config?.url,
+          method: error.config?.method,
+          headers: error.config?.headers,
+        });
+        
+        Alert.alert("Error", errorMessage);
       }
     } finally {
       setIsLoading(false);
@@ -2635,116 +3224,86 @@ const MetaAdsScreen = () => {
         targetingData.genders = genders;
       }
 
-      // Convert budget to paise (×100) - Meta uses paise for INR
-      const dailyBudgetPaise = Math.round(parseFloat(budget) * 100);
-      if (isNaN(dailyBudgetPaise) || dailyBudgetPaise < 22500) {
-        throw new Error("Daily budget must be at least ₹225.00 (22500 paise)");
-      }
-
-      const activeObjective = campaignObjective || objective;
-
-      // Build AdSet payload
-      const adSetPayload = {
-        campaignId: createdCampaignId,
-        adAccountId,
-        name: adSetName,
-        optimizationGoal: optimizationGoal,
-        billingEvent: billingEvent,
-        bidStrategy: bidStrategy,
-        dailyBudget: dailyBudgetPaise,
-        targeting: targetingData,
-        status: "PAUSED",
-        autoFixBudget: false,
-      };
-
-      // Only include page_id if campaign objective is NOT OUTCOME_ENGAGEMENT
-      if (activeObjective !== "OUTCOME_ENGAGEMENT") {
-        adSetPayload.page_id = pageId || null;
-      }
-
-      // Add bidAmount if required by bid strategy
-      if (bidStrategy === "LOWEST_COST_WITH_BID_CAP" || bidStrategy === "COST_CAP") {
-        adSetPayload.bidAmount = parseFloat(bidAmount);
-      }
-
-      // Add bidConstraints if required by bid strategy
-      if (bidStrategy === "LOWEST_COST_WITH_MIN_ROAS") {
-        adSetPayload.bidConstraints = bidConstraints;
-      }
-
-      // Add promoted_object for APP_INSTALLS and APP_ENGAGEMENT
-      if (optimizationGoal === "APP_INSTALLS" || optimizationGoal === "APP_ENGAGEMENT") {
-        adSetPayload.promotedObject = {
-          app_id: appId,
-          object_store_url: objectStoreUrl.trim()
+      // Use same API endpoint and payload structure as web version
+      // Build AdSet payload matching web structure based on campaign type
+      let adsetPayload;
+      let adsetEndpoint;
+      let destinationTypeValue;
+      
+      if (campaignType === "whatsapp") {
+        adsetPayload = {
+          name: adSetName,
+          campaign_id: createdCampaignId,
+          daily_budget: budget.toString(),
+          page_id: pageId || "", // Required for WhatsApp
+          destination_type: "WHATSAPP",
+          optimization_goal: "CONVERSATIONS",
+          billing_event: "IMPRESSIONS",
+          status: "PAUSED",
+          targeting: targetingData,
         };
-      }
-
-      // Add pixel_id and conversion_event for OFFSITE_CONVERSIONS
-      if (optimizationGoal === "OFFSITE_CONVERSIONS") {
-        adSetPayload.pixelId = pixelId.trim();
-        adSetPayload.conversionEvent = conversionEvent;
-      }
-
-      // Add destination type to payload
-      // For OUTCOME_LEADS campaigns, always use LEAD_FORM
-      // For OUTCOME_AWARENESS campaigns, don't send destination type
-      if (activeObjective === "OUTCOME_LEADS") {
-        adSetPayload.destinationType = "LEAD_FORM";
-      } else if (activeObjective !== "OUTCOME_AWARENESS" && destinationType) {
-        adSetPayload.destinationType = destinationType;
-      }
-
-      // Add WhatsApp number for WHATSAPP destination type
-      if (destinationType === "WHATSAPP") {
-        // Format WhatsApp number
-        let formattedWhatsappNumber = whatsappNumber.trim().replace(/\s+/g, "");
-        if (!formattedWhatsappNumber.startsWith("+")) {
-          formattedWhatsappNumber = `+${formattedWhatsappNumber}`;
-        }
-        
-        // Validate WhatsApp number format
-        const numberPattern = /^\+[1-9]\d{1,14}$/;
-        if (!numberPattern.test(formattedWhatsappNumber)) {
-          Alert.alert("Error", "Invalid WhatsApp number format. Please enter a valid international phone number (e.g., +1234567890).");
-          setIsLoading(false);
-          return;
-        }
-        
-        adSetPayload.whatsappNumber = formattedWhatsappNumber;
+        adsetEndpoint = `${API_BASE_URL}/click-to-whatsapp/adsets`;
+        destinationTypeValue = "WHATSAPP";
+      } else if (campaignType === "call") {
+        adsetPayload = {
+          name: adSetName,
+          campaign_id: createdCampaignId,
+          daily_budget: budget.toString(),
+          destination_type: "PHONE_CALL",
+          optimization_goal: "QUALITY_CALL",
+          billing_event: "IMPRESSIONS",
+          status: "PAUSED",
+          targeting: targetingData,
+        };
+        adsetEndpoint = `${API_BASE_URL}/click-to-call/adsets`;
+        destinationTypeValue = "PHONE_CALL";
+      } else if (campaignType === "link") {
+        adsetPayload = {
+          name: adSetName,
+          campaign_id: createdCampaignId,
+          daily_budget: budget.toString(),
+          destination_type: "WEBSITE",
+          optimization_goal: "LINK_CLICKS",
+          billing_event: "IMPRESSIONS",
+          status: "PAUSED",
+          targeting: targetingData,
+        };
+        adsetEndpoint = `${API_BASE_URL}/click-to-link/adsets`;
+        destinationTypeValue = "WEBSITE";
+      } else {
+        Alert.alert("Error", "Invalid campaign type");
+        setIsLoading(false);
+        return;
       }
 
       const adSetResponse = await axios.post(
-        `${API_BASE_URL}/adsets`,
-        adSetPayload,
+        adsetEndpoint,
+        adsetPayload,
         {
           headers: {
-            "x-fb-access-token": accessToken,
+            "Content-Type": "application/json",
+            "act_ad_account_id": adAccountId,
+            "fb_token": accessToken,
           },
         }
       );
 
-      if (!adSetResponse.data.success) {
-        throw new Error(adSetResponse.data.message || "Failed to create ad set");
+      if (!adSetResponse.data.success && !adSetResponse.data.data) {
+        throw new Error(adSetResponse.data.error || adSetResponse.data.message || "Failed to create ad set");
       }
 
-      const adSetId = adSetResponse.data.adset.id;
-      setCreatedAdSetId(adSetId);
-      
-      // Immediately set destination type from form state (this is the source of truth)
-      // This ensures we have the correct destination type before fetching from API
-      const finalDestinationType = activeObjective === "OUTCOME_LEADS" 
-        ? "LEAD_FORM" 
-        : (activeObjective === "OUTCOME_AWARENESS" ? null : destinationType);
-      
-      if (finalDestinationType) {
-        console.log("📍 Setting destination type from form state:", finalDestinationType);
-        setAdSetDestinationType(finalDestinationType);
+      // Handle both response formats: { success: true, data: { id } } or { data: { id } }
+      const adSetId = adSetResponse.data.data?.id || adSetResponse.data.id;
+      if (!adSetId) {
+        throw new Error("Ad Set ID not found in response");
       }
+
+      setCreatedAdSetId(adSetId);
+      setAdSetDestinationType(destinationTypeValue);
       
-      setStep(3); // Move to Ad creation step
+      setStep(3); // Move to AdCreative creation step (new step 3)
       
-      Alert.alert("Success", "AdSet created successfully! Now create an Ad.");
+      Alert.alert("Success", "AdSet created successfully! Now create an Ad Creative.");
     } catch (error) {
       console.error("Error creating ad set:", error);
       
@@ -2768,7 +3327,113 @@ const MetaAdsScreen = () => {
     }
   };
 
-  // Step 3: Create Ad
+  // Step 3: Create AdCreative - matching web flow
+  const handleCreateAdCreative = async () => {
+    // Wait for subscription to finish loading
+    if (subscriptionLoading) {
+      const checkSubscription = setInterval(() => {
+        if (!subscriptionLoading) {
+          clearInterval(checkSubscription);
+          setTimeout(() => handleCreateAdCreative(), 100);
+        }
+      }, 100);
+      return;
+    }
+
+    // Check subscription
+    console.log("🔍 MetaAdsScreen: Checking subscription for create ad creative");
+    if (!hasActiveSubscription(subscription) || !hasFeatureAccess(subscription, "meta-ads")) {
+      console.log("❌ MetaAdsScreen: Subscription check failed for ad creative");
+      setShowUpgradeModal(true);
+      return;
+    }
+    
+    console.log("✅ MetaAdsScreen: Subscription check passed - allowing ad creative creation");
+    
+    if (!creativeName.trim()) {
+      Alert.alert("Error", "Please enter an ad creative name");
+      return;
+    }
+    if (!creativePageId.trim()) {
+      Alert.alert("Error", "Please select a Facebook page");
+      return;
+    }
+    if (!pictureUrl.trim()) {
+      Alert.alert("Error", "Please enter a picture URL");
+      return;
+    }
+    if (!businessPageUrl.trim()) {
+      Alert.alert("Error", "Please enter a business page URL");
+      return;
+    }
+    if (!creativePhoneNumber.trim()) {
+      Alert.alert("Error", "Please enter a phone number");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Use same API endpoint and payload structure as web version
+      const creativePayload = {
+        name: creativeName,
+        page_id: creativePageId,
+        picture_url: pictureUrl,
+        business_page_url: businessPageUrl,
+        phone_number: creativePhoneNumber,
+      };
+
+      const creativeResponse = await axios.post(
+        `${API_BASE_URL}/click-to-call/adcreatives`,
+        creativePayload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "act_ad_account_id": adAccountId,
+            "fb_token": accessToken,
+          },
+        }
+      );
+
+      if (!creativeResponse.data.success && !creativeResponse.data.data) {
+        throw new Error(creativeResponse.data.error || creativeResponse.data.message || "Failed to create ad creative");
+      }
+
+      // Handle both response formats: { success: true, data: { id } } or { data: { id } }
+      const creativeId = creativeResponse.data.data?.id || creativeResponse.data.id;
+      if (!creativeId) {
+        throw new Error("Creative ID not found in response");
+      }
+
+      setCreatedCreativeId(creativeId);
+      setAdName(`${creativeName} - Ad`);
+      setStep(4); // Move to Ad creation step (step 4)
+      
+      Alert.alert("Success", "Ad Creative created successfully! Now create an Ad.");
+    } catch (error) {
+      console.error("Error creating ad creative:", error);
+      
+      // Check for token expiration
+      const { handleTokenExpiration } = require("../../utils/metaErrorHandler");
+      const wasTokenExpired = await handleTokenExpiration(error, () => {
+        setIsConnected(false);
+      });
+      
+      if (!wasTokenExpired) {
+        Alert.alert(
+          "Error",
+          error.response?.data?.error ||
+            error.response?.data?.message ||
+            error.message ||
+            "Failed to create ad creative. Please try again."
+        );
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Step 4: Create Ad - updated from step 3
   const handleCreateAd = async () => {
     // Wait for subscription to finish loading
     if (subscriptionLoading) {
@@ -2794,216 +3459,66 @@ const MetaAdsScreen = () => {
     
     console.log("✅ MetaAdsScreen: Subscription check passed - allowing ad creation");
     
+    // Simplified validation for Call campaigns - matching web flow
     if (!adName.trim()) {
       Alert.alert("Error", "Please enter an ad name");
       return;
     }
 
-    // Validate CTA-specific required fields
-    if (callToActionType === "CALL_NOW") {
-      if (!phoneNumber || !phoneNumber.trim()) {
-        Alert.alert("Error", "Phone number is required for 'Call Now' call-to-action type. Please enter a valid phone number.");
-        return;
-      }
-    }
-    
-    if (callToActionType === "GET_DIRECTIONS") {
-      if (!address || !address.trim()) {
-        Alert.alert("Error", "Address is required for 'Get Directions' call-to-action type. Please enter a valid address.");
-        return;
-      }
-    }
-
-    // Validate required fields based on call to action type
-    if (callToActionType === "WHATSAPP_MESSAGE") {
-      if (!imageHash) {
-        Alert.alert("Error", "Image is required for WhatsApp ads. Please upload an image.");
-        return;
-      }
-    }
-
-    // Check if it's a messaging CTA (link is optional)
-    const isMessagingCTA = callToActionType === "WHATSAPP_MESSAGE" || 
-                          callToActionType === "SEND_MESSAGE" || 
-                          callToActionType === "MESSAGE_PAGE" || 
-                          callToActionType === "MESSAGE_US";
-    
-    // Get pageId from AdSet if not already set (pageId should come from step 2)
-    let finalPageId = pageId;
-    if (!finalPageId && createdAdSetId && accessToken) {
-      try {
-        const adsetResponse = await axios.get(`${API_BASE_URL}/adsets/${createdAdSetId}`, {
-          headers: {
-            "x-fb-access-token": accessToken,
-          },
-        });
-        if (adsetResponse.data?.adset?.page_id) {
-          finalPageId = adsetResponse.data.adset.page_id;
-          setPageId(finalPageId);
-          console.log("📋 Using page_id from AdSet:", finalPageId);
-        }
-      } catch (error) {
-        console.error("Error fetching page_id from AdSet:", error);
-      }
-    }
-    
-    // page_id is REQUIRED for all ads - use the one from AdSet
-    if (!finalPageId) {
-      Alert.alert("Error", "Page ID is required for all ads. Please ensure the AdSet has a Facebook page selected.");
+    if (!createdCreativeId) {
+      Alert.alert("Error", "Creative ID is missing. Please create an Ad Creative first.");
       return;
     }
 
-    // Validate phone number for PHONE_CALL destination type
-    if (adSetDestinationType === "PHONE_CALL" && (!phoneNumber || !phoneNumber.trim())) {
-      Alert.alert("Error", "Phone number is required for Phone Call destination type. Please enter a valid phone number.");
-      return;
-    }
-    
-    // For non-messaging CTAs and non-PHONE_CALL destination, destination URL is required
-    if (!isMessagingCTA && adSetDestinationType !== "PHONE_CALL" && (!destinationUrl || !destinationUrl.trim())) {
-      Alert.alert("Error", "Destination URL is required for this call-to-action type. Please enter a valid URL.");
-      return;
-    }
-
-    // For video ads, validate video and thumbnail
-    if (requiresVideo && !videoId) {
-      Alert.alert("Error", `Video is required for ${optimizationGoalNames[adSetOptimizationGoal] || adSetOptimizationGoal} optimization goal. Please upload a video.`);
-      return;
-    }
-
-    if (requiresVideo && videoId && !imageHash) {
-      Alert.alert("Error", "Image thumbnail is required for video ads. Meta requires image_hash or image_url in video_data. Please upload an image.");
+    if (!createdAdSetId) {
+      Alert.alert("Error", "Ad Set ID is missing. Please create an Ad Set first.");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // Build call_to_action structure according to Meta API v23
-      const callToAction = {
-        type: callToActionType || "LEARN_MORE",
-      };
-      
-      // Handle CTAs that require value.link
-      if (callToActionType === "CALL_NOW" || adSetDestinationType === "PHONE_CALL") {
-        if (!phoneNumber || !phoneNumber.trim()) {
-          Alert.alert("Error", "Phone number is required. Please enter a valid phone number.");
-          setIsLoading(false);
-          return;
-        }
-        const cleanPhone = phoneNumber.trim().replace(/\s+/g, '').replace(/[^\d+]/g, '');
-        callToAction.value = {
-          link: `tel:${cleanPhone}`
-        };
-      } else if (callToActionType === "GET_DIRECTIONS") {
-        callToAction.value = {
-          link: address.trim()
-        };
-      }
-      
-      // Build object_story_spec based on whether it's a video ad or link ad
-      let objectStorySpec = {};
+      // Use same API endpoint and payload structure as web version
 
-      if (requiresVideo && videoId) {
-        // For video ads, destination URL goes in call_to_action.value.link
-        if (!isMessagingCTA && destinationUrl && destinationUrl.trim()) {
-          callToAction.value = {
-            link: destinationUrl.trim()
-          };
-        }
-        
-        // Build video_data
-        const videoData = {
-          video_id: videoId,
-          message: adCreative.primaryText || adCreative.message || "Check out our video!",
-          call_to_action: callToAction,
-          image_hash: imageHash, // Required by Meta for video ads
-        };
-        
-        // Add optional fields for video_data
-        if (adCreative.headline && adCreative.headline.trim()) {
-          videoData.title = adCreative.headline.trim();
-        }
-        if (adCreative.description && adCreative.description.trim()) {
-          videoData.description = adCreative.description.trim();
-        }
-        
-        // Build object_story_spec with video_data
-        objectStorySpec = {
-          page_id: finalPageId,
-          video_data: videoData,
-        };
+      const adPayload = {
+        adset_id: createdAdSetId,
+        creative_id: createdCreativeId,
+        status: "PAUSED",
+      };
+
+      // Determine API endpoint based on campaign type
+      let adEndpoint;
+      if (campaignType === "whatsapp") {
+        adEndpoint = `${API_BASE_URL}/click-to-whatsapp/ads`;
+      } else if (campaignType === "call") {
+        adEndpoint = `${API_BASE_URL}/click-to-call/ads`;
+      } else if (campaignType === "link") {
+        adEndpoint = `${API_BASE_URL}/click-to-link/ads`;
       } else {
-        // Build link_data according to Meta API v23 structure
-        const linkData = {
-          message: adCreative.primaryText || adCreative.message || "Check out our offer!",
-          call_to_action: callToAction,
-        };
-        
-        // For messaging CTAs, link is optional
-        // For CALL_NOW CTA, use tel: link
-        // For all other CTAs, link is required
-        if (callToActionType === "CALL_NOW" && phoneNumber && phoneNumber.trim()) {
-          const cleanPhone = phoneNumber.trim().replace(/\s+/g, '').replace(/[^\d+]/g, '');
-          linkData.link = `tel:${cleanPhone}`;
-        } else if (!isMessagingCTA) {
-          linkData.link = destinationUrl.trim();
-        } else {
-          // For messaging CTAs, link is optional but can be included
-          if (destinationUrl && destinationUrl.trim()) {
-            linkData.link = destinationUrl.trim();
-          }
-          // For WHATSAPP_MESSAGE, image_hash is typically required
-          if (callToActionType === "WHATSAPP_MESSAGE" && imageHash) {
-            linkData.image_hash = imageHash;
-          }
-        }
-        
-        // Add optional fields (only if they have values)
-        if (adCreative.headline && adCreative.headline.trim()) {
-          linkData.name = adCreative.headline.trim();
-        } else if (adName && adName.trim()) {
-          linkData.name = adName.trim();
-        }
-        
-        if (adCreative.description && adCreative.description.trim()) {
-          linkData.description = adCreative.description.trim();
-        }
-        
-        // Add image_hash if available
-        if (imageHash) {
-          linkData.image_hash = imageHash;
-        }
-        
-        // Build object_story_spec with link_data
-        objectStorySpec = {
-          page_id: finalPageId,
-          link_data: linkData,
-        };
+        Alert.alert("Error", "Invalid campaign type");
+        setIsLoading(false);
+        return;
       }
 
       const adResponse = await axios.post(
-        `${API_BASE_URL}/ads`,
-        {
-          adsetId: createdAdSetId,
-          name: adName,
-          creative: {
-            object_story_spec: objectStorySpec,
-          },
-          status: "PAUSED",
-        },
+        adEndpoint,
+        adPayload,
         {
           headers: {
-            "x-fb-access-token": accessToken,
+            "Content-Type": "application/json",
+            "act_ad_account_id": adAccountId,
+            "fb_token": accessToken,
           },
         }
       );
 
-      if (!adResponse.data.success) {
-        throw new Error(adResponse.data.message || "Failed to create ad");
+      if (!adResponse.data.success && !adResponse.data.data) {
+        throw new Error(adResponse.data.error || adResponse.data.message || "Failed to create ad");
       }
 
-      console.log("Ad created successfully:", adResponse.data.ad?.id);
+      // Handle both response formats: { success: true, data: { id } } or { data: { id } }
+      const adId = adResponse.data.data?.id || adResponse.data.id;
+      console.log("Ad created successfully:", adId);
       
       Alert.alert("Success", "Campaign, AdSet, and Ad created successfully!", [
         {
@@ -3087,209 +3602,532 @@ const MetaAdsScreen = () => {
     <View style={styles.container}>
       <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      {activeTab === "manage" ? (
+      {activeTab === "overview" ? (
+        <AccountOverview />
+      ) : activeTab === "manage" ? (
         <MetaCompaigns />
+      ) : activeTab === "analytics" ? (
+        <AnalyticsScreen />
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
           {activeTab === "create" ? (
             <>
-              {step === 1 && (
+              {step === 0 && (
                 <>
-                  <CampaignDetails
-                    campaignName={campaignName}
-                    setCampaignName={setCampaignName}
-                    budget={budget}
-                    setBudget={setBudget}
-                    objective={objective}
-                    setObjective={setObjective}
-                    destinationType={destinationType}
-                    setDestinationType={setDestinationType}
-                    whatsappNumber={whatsappNumber}
-                    setWhatsappNumber={setWhatsappNumber}
-                  />
-                  <TouchableOpacity
-                    style={[styles.launchButton, isLoading && styles.launchButtonDisabled]}
-                    onPress={handleCreateCampaign}
-                    disabled={isLoading || !campaignName.trim()}
-                  >
-                    {isLoading ? (
-                      <ActivityIndicator color="#fff" />
-                    ) : (
-                      <Text style={styles.launchButtonText}>Create Campaign</Text>
-                    )}
-                  </TouchableOpacity>
-                </>
-              )}
+                  {/* Campaign Type Selection Screen */}
+                  <View style={styles.section}>
+                    <SectionHeader title="Select Campaign Type" />
+                    <Text style={[styles.inputLabel, { marginBottom: 20, textAlign: "center" }]}>
+                      Choose the type of campaign you want to create
+                    </Text>
+                    
+                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 15, justifyContent: "center" }}>
+                      {/* Click to WhatsApp */}
+                      <TouchableOpacity
+                        style={[
+                          styles.campaignTypeCard,
+                          { backgroundColor: "#9333EA" }, // Purple
+                          campaignType === "whatsapp" && styles.campaignTypeCardSelected,
+                        ]}
+                        onPress={() => {
+                          setCampaignType("whatsapp");
+                          setStep(1);
+                        }}
+                      >
+                        <FontAwesome name="whatsapp" size={40} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
+                        <Text style={styles.campaignTypeText}>Click to WhatsApp</Text>
+                      </TouchableOpacity>
 
-              {step === 2 && (
-                <>
-                  <AdSetDetails
-                    adSetName={adSetName}
-                    setAdSetName={setAdSetName}
-                    budget={budget}
-                    setBudget={setBudget}
-                    pageId={pageId}
-                    setPageId={setPageId}
-                    pages={pages}
-                    loadingPages={loadingPages}
-                    optimizationGoal={optimizationGoal}
-                    setOptimizationGoal={setOptimizationGoal}
-                    allowedOptimizationGoals={allowedOptimizationGoals}
-                    optimizationGoalNames={optimizationGoalNames}
-                    campaignObjectiveNames={campaignObjectiveNames}
-                    campaignObjective={campaignObjective}
-                    objective={objective}
-                    destinationType={destinationType}
-                    setDestinationType={setDestinationType}
-                    whatsappNumber={whatsappNumber}
-                    setWhatsappNumber={setWhatsappNumber}
-                    bidStrategy={bidStrategy}
-                    setBidStrategy={setBidStrategy}
-                    bidAmount={bidAmount}
-                    setBidAmount={setBidAmount}
-                    bidConstraints={bidConstraints}
-                    setBidConstraints={setBidConstraints}
-                    appId={appId}
-                    setAppId={setAppId}
-                    objectStoreUrl={objectStoreUrl}
-                    setObjectStoreUrl={setObjectStoreUrl}
-                    pixelId={pixelId}
-                    setPixelId={setPixelId}
-                    conversionEvent={conversionEvent}
-                    setConversionEvent={setConversionEvent}
-                    targeting={targeting}
-                    setTargeting={setTargeting}
-                    customLocations={customLocations}
-                    setCustomLocations={setCustomLocations}
-                    selectedPlace={selectedPlace}
-                    setSelectedPlace={setSelectedPlace}
-                    handlePlaceSelect={handlePlaceSelect}
-                    publisherPlatforms={publisherPlatforms}
-                    setPublisherPlatforms={setPublisherPlatforms}
-                    facebookPositions={facebookPositions}
-                    setFacebookPositions={setFacebookPositions}
-                    instagramPositions={instagramPositions}
-                    setInstagramPositions={setInstagramPositions}
-                    devicePlatforms={devicePlatforms}
-                    setDevicePlatforms={setDevicePlatforms}
-                    genders={genders}
-                    setGenders={setGenders}
-                  />
-                  <View style={{ flexDirection: "row", gap: 15, marginTop: 20 }}>
-                    <TouchableOpacity
-                      style={[styles.launchButton, { flex: 1, backgroundColor: "#8B9DC3" }]}
-                      onPress={() => setStep(1)}
-                    >
-                      <Text style={styles.launchButtonText}>Back</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.launchButton,
-                        { flex: 1 },
-                        isLoading && styles.launchButtonDisabled,
-                      ]}
-                      onPress={handleCreateAdSet}
-                      disabled={
-                        isLoading ||
-                        !adSetName.trim() ||
-                        !budget ||
-                        parseFloat(budget) < 225 ||
-                        customLocations.length === 0 ||
-                        publisherPlatforms.length === 0 ||
-                        ((campaignObjective || objective) !== "OUTCOME_ENGAGEMENT" && !pageId) ||
-                        ((campaignObjective || objective) !== "OUTCOME_LEADS" && (campaignObjective || objective) !== "OUTCOME_AWARENESS" && !destinationType) ||
-                        (destinationType === "WHATSAPP" && !whatsappNumber) ||
-                        ((optimizationGoal === "APP_INSTALLS" || optimizationGoal === "APP_ENGAGEMENT") && (!appId || !objectStoreUrl)) ||
-                        (optimizationGoal === "OFFSITE_CONVERSIONS" && (!pixelId || !conversionEvent)) ||
-                        (bidStrategy === "LOWEST_COST_WITH_BID_CAP" && (!bidAmount || parseFloat(bidAmount) <= 0)) ||
-                        (bidStrategy === "COST_CAP" && (!bidAmount || parseFloat(bidAmount) <= 0)) ||
-                        (bidStrategy === "LOWEST_COST_WITH_MIN_ROAS" && (!bidConstraints.roas_average_floor || parseFloat(bidConstraints.roas_average_floor) <= 0))
-                      }
-                    >
-                      {isLoading ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text style={styles.launchButtonText}>Create AdSet</Text>
-                      )}
-                    </TouchableOpacity>
+                      {/* Click to Call */}
+                      <TouchableOpacity
+                        style={[
+                          styles.campaignTypeCard,
+                          { backgroundColor: "#F97316" }, // Orange
+                          campaignType === "call" && styles.campaignTypeCardSelected,
+                        ]}
+                        onPress={() => {
+                          setCampaignType("call");
+                          setStep(1);
+                        }}
+                      >
+                        <Feather name="phone" size={40} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
+                        <Text style={styles.campaignTypeText}>Click to Call</Text>
+                      </TouchableOpacity>
+
+                      {/* Click to Link */}
+                      <TouchableOpacity
+                        style={[
+                          styles.campaignTypeCard,
+                          { backgroundColor: "#EC4899" }, // Pink
+                          campaignType === "link" && styles.campaignTypeCardSelected,
+                        ]}
+                        onPress={() => {
+                          setCampaignType("link");
+                          setStep(1);
+                        }}
+                      >
+                        <Feather name="link" size={40} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
+                        <Text style={styles.campaignTypeText}>Click to Link</Text>
+                      </TouchableOpacity>
+
+                      {/* Lead Form Ads */}
+                      <TouchableOpacity
+                        style={[
+                          styles.campaignTypeCard,
+                          { backgroundColor: "#3B82F6" }, // Blue
+                          campaignType === "lead-form" && styles.campaignTypeCardSelected,
+                        ]}
+                        onPress={() => {
+                          setCampaignType("lead-form");
+                          setStep(1);
+                        }}
+                      >
+                        <MaterialIcons name="description" size={40} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
+                        <Text style={styles.campaignTypeText}>Lead Form Ads</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </>
               )}
 
-              {step === 3 && (
+              {step === 1 && campaignType && (
                 <>
-                  <AdCreationSection
-                    adName={adName}
-                    setAdName={setAdName}
-                    callToActionType={callToActionType}
-                    setCallToActionType={setCallToActionType}
-                    allowedCTAs={allowedCTAs}
-                    ctaTypeNames={ctaTypeNames}
-                    destinationUrl={destinationUrl}
-                    setDestinationUrl={setDestinationUrl}
-                    phoneNumber={phoneNumber}
-                    setPhoneNumber={setPhoneNumber}
-                    address={address}
-                    setAddress={setAddress}
-                    pageId={pageId}
-                    setPageId={setPageId}
-                    pages={pages}
-                    loadingPages={loadingPages}
-                    adCreative={adCreative}
-                    setAdCreative={setAdCreative}
-                    imageHash={imageHash}
-                    setImageHash={setImageHash}
-                    videoId={videoId}
-                    setVideoId={setVideoId}
-                    uploadingImage={uploadingImage}
-                    uploadingVideo={uploadingVideo}
-                    handleImageUpload={handleImageUpload}
-                    handleVideoUpload={handleVideoUpload}
-                    requiresVideo={requiresVideo}
-                    adSetOptimizationGoal={adSetOptimizationGoal}
-                    optimizationGoal={optimizationGoal}
-                    optimizationGoalNames={optimizationGoalNames}
-                    adSetDestinationType={adSetDestinationType}
-                    isCTAAutoSelected={isCTAAutoSelected}
-                  />
-                  <View style={{ flexDirection: "row", gap: 15, marginTop: 20 }}>
-                    <TouchableOpacity
-                      style={[styles.launchButton, { flex: 1, backgroundColor: "#8B9DC3" }]}
-                      onPress={() => setStep(2)}
-                    >
-                      <Text style={styles.launchButtonText}>Back</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.launchButton,
-                        { flex: 1, backgroundColor: "#4CAF50" },
-                        isLoading && styles.launchButtonDisabled,
-                      ]}
-                      onPress={handleCreateAd}
-                      disabled={
-                        isLoading ||
-                        !adName.trim() ||
-                        (callToActionType === "WHATSAPP_MESSAGE" && !imageHash) ||
-                        (() => {
-                          const isMessagingCTA = callToActionType === "WHATSAPP_MESSAGE" || 
-                                                callToActionType === "SEND_MESSAGE" || 
-                                                callToActionType === "MESSAGE_PAGE" || 
-                                                callToActionType === "MESSAGE_US";
-                          if (isMessagingCTA) {
-                            return callToActionType === "WHATSAPP_MESSAGE" && !imageHash;
-                          } else {
-                            return !destinationUrl;
+                  {campaignType === "whatsapp" && (
+                    <WhatsAppCampaign
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedCampaignId(data.campaign_id);
+                        setStep(2);
+                      }}
+                      onBack={() => setStep(0)}
+                    />
+                  )}
+                  {campaignType === "call" && (
+                    <CallCampaign
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedCampaignId(data.campaign_id);
+                        setStep(2);
+                      }}
+                      onBack={() => setStep(0)}
+                    />
+                  )}
+                  {campaignType === "link" && (
+                    <LinkCampaign
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedCampaignId(data.campaign_id);
+                        setStep(2);
+                      }}
+                      onBack={() => setStep(0)}
+                    />
+                  )}
+                  {campaignType === "lead-form" && (
+                    <>
+                      <CampaignDetails
+                        campaignName={campaignName}
+                        setCampaignName={setCampaignName}
+                        budget={budget}
+                        setBudget={setBudget}
+                        objective={objective}
+                        setObjective={setObjective}
+                        destinationType={destinationType}
+                        setDestinationType={setDestinationType}
+                        whatsappNumber={whatsappNumber}
+                        setWhatsappNumber={setWhatsappNumber}
+                        campaignType={campaignType}
+                      />
+                      <View style={{ flexDirection: "row", gap: 15, marginTop: 20 }}>
+                        <TouchableOpacity
+                          style={[styles.launchButton, { flex: 1, backgroundColor: "#8B9DC3" }]}
+                          onPress={() => setStep(0)}
+                        >
+                          <Text style={styles.launchButtonText}>Back</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.launchButton, { flex: 1 }, isLoading && styles.launchButtonDisabled]}
+                          onPress={handleCreateCampaign}
+                          disabled={isLoading || !campaignName.trim()}
+                        >
+                          {isLoading ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <Text style={styles.launchButtonText}>Create Campaign</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </>
+              )}
+
+              {step === 2 && campaignType && (
+                <>
+                  {campaignType === "whatsapp" && (
+                    <WhatsAppAdSet
+                      campaignData={campaignData}
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedAdSetId(data.adset_id);
+                        setStep(3);
+                      }}
+                      onBack={() => setStep(1)}
+                    />
+                  )}
+                  {campaignType === "call" && (
+                    <CallAdSet
+                      campaignData={campaignData}
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedAdSetId(data.adset_id);
+                        setStep(3);
+                      }}
+                      onBack={() => setStep(1)}
+                    />
+                  )}
+                  {campaignType === "link" && (
+                    <LinkAdSet
+                      campaignData={campaignData}
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedAdSetId(data.adset_id);
+                        setStep(3);
+                      }}
+                      onBack={() => setStep(1)}
+                    />
+                  )}
+                  {campaignType === "lead-form" && (
+                    <>
+                      <AdSetDetails
+                        adSetName={adSetName}
+                        setAdSetName={setAdSetName}
+                        budget={budget}
+                        setBudget={setBudget}
+                        pageId={pageId}
+                        setPageId={setPageId}
+                        pages={pages}
+                        loadingPages={loadingPages}
+                        optimizationGoal={optimizationGoal}
+                        setOptimizationGoal={setOptimizationGoal}
+                        allowedOptimizationGoals={allowedOptimizationGoals}
+                        optimizationGoalNames={optimizationGoalNames}
+                        campaignObjectiveNames={campaignObjectiveNames}
+                        campaignObjective={campaignObjective}
+                        objective={objective}
+                        destinationType={destinationType}
+                        setDestinationType={setDestinationType}
+                        whatsappNumber={whatsappNumber}
+                        setWhatsappNumber={setWhatsappNumber}
+                        bidStrategy={bidStrategy}
+                        setBidStrategy={setBidStrategy}
+                        bidAmount={bidAmount}
+                        setBidAmount={setBidAmount}
+                        bidConstraints={bidConstraints}
+                        setBidConstraints={setBidConstraints}
+                        appId={appId}
+                        setAppId={setAppId}
+                        objectStoreUrl={objectStoreUrl}
+                        setObjectStoreUrl={setObjectStoreUrl}
+                        pixelId={pixelId}
+                        setPixelId={setPixelId}
+                        conversionEvent={conversionEvent}
+                        setConversionEvent={setConversionEvent}
+                        targeting={targeting}
+                        setTargeting={setTargeting}
+                        customLocations={customLocations}
+                        setCustomLocations={setCustomLocations}
+                        selectedPlace={selectedPlace}
+                        setSelectedPlace={setSelectedPlace}
+                        handlePlaceSelect={handlePlaceSelect}
+                        publisherPlatforms={publisherPlatforms}
+                        setPublisherPlatforms={setPublisherPlatforms}
+                        facebookPositions={facebookPositions}
+                        setFacebookPositions={setFacebookPositions}
+                        instagramPositions={instagramPositions}
+                        setInstagramPositions={setInstagramPositions}
+                        devicePlatforms={devicePlatforms}
+                        setDevicePlatforms={setDevicePlatforms}
+                        genders={genders}
+                        setGenders={setGenders}
+                        campaignType={campaignType}
+                      />
+                      <View style={{ flexDirection: "row", gap: 15, marginTop: 20 }}>
+                        <TouchableOpacity
+                          style={[styles.launchButton, { flex: 1, backgroundColor: "#8B9DC3" }]}
+                          onPress={() => setStep(1)}
+                        >
+                          <Text style={styles.launchButtonText}>Back</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.launchButton,
+                            { flex: 1 },
+                            isLoading && styles.launchButtonDisabled,
+                          ]}
+                          onPress={handleCreateAdSet}
+                          disabled={
+                            isLoading ||
+                            !adSetName.trim() ||
+                            !budget ||
+                            parseFloat(budget) < 225 ||
+                            customLocations.length === 0 ||
+                            publisherPlatforms.length === 0 ||
+                            ((campaignObjective || objective) !== "OUTCOME_ENGAGEMENT" && !pageId) ||
+                            ((campaignObjective || objective) !== "OUTCOME_LEADS" && (campaignObjective || objective) !== "OUTCOME_AWARENESS" && !destinationType) ||
+                            (destinationType === "WHATSAPP" && !whatsappNumber) ||
+                            ((optimizationGoal === "APP_INSTALLS" || optimizationGoal === "APP_ENGAGEMENT") && (!appId || !objectStoreUrl)) ||
+                            (optimizationGoal === "OFFSITE_CONVERSIONS" && (!pixelId || !conversionEvent)) ||
+                            (bidStrategy === "LOWEST_COST_WITH_BID_CAP" && (!bidAmount || parseFloat(bidAmount) <= 0)) ||
+                            (bidStrategy === "COST_CAP" && (!bidAmount || parseFloat(bidAmount) <= 0)) ||
+                            (bidStrategy === "LOWEST_COST_WITH_MIN_ROAS" && (!bidConstraints.roas_average_floor || parseFloat(bidConstraints.roas_average_floor) <= 0))
                           }
-                        })()
-                      }
-                    >
-                      {isLoading ? (
-                        <ActivityIndicator color="#fff" />
-                      ) : (
-                        <Text style={styles.launchButtonText}>Complete & Create Ad</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
+                        >
+                          {isLoading ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <Text style={styles.launchButtonText}>Create AdSet</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </>
+              )}
+
+              {step === 3 && campaignType && (
+                <>
+                  {campaignType === "whatsapp" && (
+                    <WhatsAppAdCreative
+                      campaignData={campaignData}
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedCreativeId(data.creative_id);
+                        setStep(4);
+                      }}
+                      onBack={() => setStep(2)}
+                    />
+                  )}
+                  {campaignType === "call" && (
+                    <CallAdCreative
+                      campaignData={campaignData}
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedCreativeId(data.creative_id);
+                        setStep(4);
+                      }}
+                      onBack={() => setStep(2)}
+                    />
+                  )}
+                  {campaignType === "link" && (
+                    <LinkAdCreative
+                      campaignData={campaignData}
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedCreativeId(data.creative_id);
+                        setStep(4);
+                      }}
+                      onBack={() => setStep(2)}
+                    />
+                  )}
+                  {campaignType === "lead-form" && (
+                    <>
+                      {/* AdCreative Form - Step 3 - matching web flow */}
+                      <View style={styles.section}>
+                        <SectionHeader title="Step 3: Create Ad Creative" step={3} totalSteps={4} />
+                        
+                        <View style={styles.inputContainer}>
+                          <Text style={styles.inputLabel}>Ad Creative Name <Text style={{ color: "#FF0000" }}>*</Text></Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Enter ad creative name"
+                            value={creativeName}
+                            onChangeText={setCreativeName}
+                          />
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                          <Text style={styles.inputLabel}>Page ID <Text style={{ color: "#FF0000" }}>*</Text></Text>
+                          {loadingPages ? (
+                            <View style={[styles.input, { backgroundColor: "#F5F5F5" }]}>
+                              <Text style={{ color: "#999" }}>Loading pages...</Text>
+                            </View>
+                          ) : pages.length > 0 ? (
+                            <CustomSelect
+                              options={pages.map(page => ({ label: `${page.name} (${page.id})`, value: page.id }))}
+                              value={creativePageId}
+                              onValueChange={setCreativePageId}
+                              placeholder="Select a Facebook Page"
+                            />
+                          ) : (
+                            <TextInput
+                              style={styles.input}
+                              placeholder="Enter your Facebook Page ID"
+                              value={creativePageId}
+                              onChangeText={setCreativePageId}
+                            />
+                          )}
+                          <Text style={styles.inputHint}>Your Facebook Page ID where the ad will appear</Text>
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                          <Text style={styles.inputLabel}>Picture URL <Text style={{ color: "#FF0000" }}>*</Text></Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="https://example.com/image.jpg"
+                            value={pictureUrl}
+                            onChangeText={setPictureUrl}
+                            keyboardType="url"
+                            autoCapitalize="none"
+                          />
+                          <Text style={styles.inputHint}>URL of the image for your ad (must be publicly accessible)</Text>
+                        </View>
+
+                        <View style={styles.inputContainer}>
+                          <Text style={styles.inputLabel}>Business Page URL <Text style={{ color: "#FF0000" }}>*</Text></Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="https://yourbusiness.com"
+                            value={businessPageUrl}
+                            onChangeText={setBusinessPageUrl}
+                            keyboardType="url"
+                            autoCapitalize="none"
+                          />
+                          <Text style={styles.inputHint}>URL of your business page or website</Text>
+                        </View>
+                      </View>
+
+                      <View style={{ flexDirection: "row", gap: 15, marginTop: 20 }}>
+                        <TouchableOpacity
+                          style={[styles.launchButton, { flex: 1, backgroundColor: "#8B9DC3" }]}
+                          onPress={() => setStep(2)}
+                        >
+                          <Text style={styles.launchButtonText}>Back</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.launchButton,
+                            { flex: 1 },
+                            isLoading && styles.launchButtonDisabled,
+                          ]}
+                          onPress={handleCreateAdCreative}
+                          disabled={
+                            isLoading ||
+                            !creativeName.trim() ||
+                            !creativePageId.trim() ||
+                            !pictureUrl.trim() ||
+                            !businessPageUrl.trim()
+                          }
+                        >
+                          {isLoading ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <Text style={styles.launchButtonText}>Create Ad Creative</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </>
+              )}
+
+              {step === 4 && campaignType && (
+                <>
+                  {campaignType === "whatsapp" && (
+                    <WhatsAppLaunch
+                      campaignData={campaignData}
+                      onComplete={() => {
+                        setStep(0);
+                        setCampaignType(null);
+                        setCampaignData({});
+                        setCreatedCampaignId(null);
+                        setCreatedAdSetId(null);
+                        setCreatedCreativeId(null);
+                        setActiveTab("overview");
+                      }}
+                      onBack={() => setStep(3)}
+                    />
+                  )}
+                  {campaignType === "call" && (
+                    <CallLaunch
+                      campaignData={campaignData}
+                      onComplete={() => {
+                        setStep(0);
+                        setCampaignType(null);
+                        setCampaignData({});
+                        setCreatedCampaignId(null);
+                        setCreatedAdSetId(null);
+                        setCreatedCreativeId(null);
+                        setActiveTab("overview");
+                      }}
+                      onBack={() => setStep(3)}
+                    />
+                  )}
+                  {campaignType === "link" && (
+                    <LinkLaunch
+                      campaignData={campaignData}
+                      onComplete={() => {
+                        setStep(0);
+                        setCampaignType(null);
+                        setCampaignData({});
+                        setCreatedCampaignId(null);
+                        setCreatedAdSetId(null);
+                        setCreatedCreativeId(null);
+                        setActiveTab("overview");
+                      }}
+                      onBack={() => setStep(3)}
+                    />
+                  )}
+                  {campaignType === "lead-form" && (
+                    <>
+                      {/* Ad Creation - Step 4 - simplified for Call campaigns */}
+                      <View style={styles.section}>
+                        <SectionHeader title="Step 4: Create Ad" step={4} totalSteps={4} />
+                        
+                        <View style={styles.inputContainer}>
+                          <Text style={styles.inputLabel}>Ad Name <Text style={{ color: "#FF0000" }}>*</Text></Text>
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Enter ad name"
+                            value={adName}
+                            onChangeText={setAdName}
+                          />
+                        </View>
+
+                        {createdCreativeId && (
+                          <View style={{ marginTop: 15, padding: 10, backgroundColor: "#E3F2FD", borderRadius: 8 }}>
+                            <Text style={[styles.inputLabel, { fontSize: 12 }]}>Creative ID:</Text>
+                            <Text style={[styles.inputHint, { fontWeight: "600", marginTop: 4 }]}>
+                              {createdCreativeId}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      <View style={{ flexDirection: "row", gap: 15, marginTop: 20 }}>
+                        <TouchableOpacity
+                          style={[styles.launchButton, { flex: 1, backgroundColor: "#8B9DC3" }]}
+                          onPress={() => setStep(3)}
+                        >
+                          <Text style={styles.launchButtonText}>Back</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.launchButton,
+                            { flex: 1, backgroundColor: "#4CAF50" },
+                            isLoading && styles.launchButtonDisabled,
+                          ]}
+                          onPress={handleCreateAd}
+                          disabled={isLoading || !adName.trim() || !createdCreativeId}
+                        >
+                          {isLoading ? (
+                            <ActivityIndicator color="#fff" />
+                          ) : (
+                            <Text style={styles.launchButtonText}>Launch Ad</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
                 </>
               )}
             </>
@@ -3678,6 +4516,31 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
     fontSize: 15,
+  },
+  campaignTypeCard: {
+    width: "45%",
+    aspectRatio: 1.2,
+    borderRadius: 16,
+    padding: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  campaignTypeCardSelected: {
+    borderWidth: 3,
+    borderColor: "#fff",
+    transform: [{ scale: 1.05 }],
+  },
+  campaignTypeText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    textAlign: "center",
+    marginTop: 10,
   },
   modalOverlay: {
     flex: 1,

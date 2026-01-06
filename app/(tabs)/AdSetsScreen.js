@@ -228,106 +228,160 @@ export default function AdSetsScreen() {
   };
 
 
-  const renderAdSetItem = ({ item }) => {
+  const renderAdSetItem = ({ item, index }) => {
     const status = item.effectiveStatus || item.status;
     const statusColor = getStatusColor(status);
     const statusText = getStatusText(status);
     const isPaused = status === "paused" || status === "adset_paused";
     const budget = item.lifetimeBudget || item.dailyBudget;
 
+    // Colorful gradient backgrounds matching web design
+    const gradients = [
+      { from: "#9333EA", to: "#EC4899" }, // purple to pink
+      { from: "#3B82F6", to: "#06B6D4" }, // blue to cyan
+      { from: "#10B981", to: "#059669" }, // green to emerald
+      { from: "#F97316", to: "#EF4444" }, // orange to red
+      { from: "#6366F1", to: "#9333EA" }, // indigo to purple
+      { from: "#14B8A6", to: "#3B82F6" }, // teal to blue
+      { from: "#EAB308", to: "#F97316" }, // yellow to orange
+      { from: "#EC4899", to: "#F43F5E" }, // pink to rose
+    ];
+    const gradient = gradients[index % gradients.length];
+
     return (
-      <View style={styles.adSetCard}>
-        <View style={styles.adSetHeader}>
-          <Text style={styles.adSetName}>{item.name}</Text>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: statusColor },
-            ]}
-          >
-            <Text style={styles.statusText}>{statusText}</Text>
-          </View>
-        </View>
-
-        <View style={styles.adSetDetails}>
-          <View style={styles.detailRow}>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Budget</Text>
-              <Text style={styles.detailValue}>{budget}</Text>
-            </View>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Status</Text>
-              <Text style={styles.detailValue}>{statusText}</Text>
-            </View>
-            <View style={styles.detailItem}>
-              <Text style={styles.detailLabel}>Optimization</Text>
-              <Text style={styles.detailValue}>{item.optimizationGoal}</Text>
-            </View>
-          </View>
-
-          {item.createdTime && (
-            <View style={styles.detailRow}>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Created</Text>
-                <Text style={styles.detailValue}>
-                  {new Date(item.createdTime).toLocaleDateString()}
+      <TouchableOpacity
+        style={[
+          styles.adSetCard,
+          {
+            backgroundColor: gradient.from,
+          },
+        ]}
+        onPress={() => {
+          router.push({
+            pathname: "/AdsScreen",
+            params: {
+              adsetId: item.id,
+              adsetName: item.name,
+              campaignId: campaignId,
+              campaignName: campaignName || "Campaign",
+            },
+          });
+        }}
+        activeOpacity={0.9}
+      >
+        {/* Gradient overlay effect */}
+        <View
+          style={[
+            styles.gradientOverlay,
+            {
+              backgroundColor: gradient.to,
+              opacity: 0.3,
+            },
+          ]}
+        />
+        {/* Decorative circles */}
+        <View style={styles.decorativeCircle1} />
+        <View style={styles.decorativeCircle2} />
+        
+        <View style={styles.adSetContent}>
+          <View style={styles.adSetHeader}>
+            <View style={styles.adSetNameContainer}>
+              <Text style={styles.adSetName} numberOfLines={2}>
+                {item.name}
+              </Text>
+              <Text style={styles.adSetId}>ID: {item.id}</Text>
+              {budget && (
+                <Text style={styles.adSetBudget}>
+                  Budget: {budget}
                 </Text>
-              </View>
+              )}
+              {item.optimizationGoal && (
+                <View style={styles.optimizationBadge}>
+                  <Text style={styles.optimizationText}>
+                    {item.optimizationGoal}
+                  </Text>
+                </View>
+              )}
             </View>
-          )}
-        </View>
-
-        <View style={styles.adSetActions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.viewAdsButton]}
-            onPress={() => {
-              router.push({
-                pathname: "/AdsScreen",
-                params: {
-                  adsetId: item.id,
-                  adsetName: item.name,
-                  campaignId: campaignId,
-                  campaignName: campaignName || "Campaign",
-                },
-              });
-            }}
-          >
-            <Ionicons name="eye-outline" size={16} color="#1877F2" />
-            <Text style={[styles.actionText, { color: "#1877F2" }]}>
-              View Ads
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handlePauseResume(item.id, status)}
-          >
-            <MaterialCommunityIcons
-              name={isPaused ? "play" : "pause"}
-              size={16}
-              color={isPaused ? "#4CAF50" : "#FF9800"}
-            />
-            <Text
+            <View
               style={[
-                styles.actionText,
+                styles.statusBadge,
                 {
-                  color: isPaused ? "#4CAF50" : "#FF9800",
+                  backgroundColor:
+                    statusText === "ACTIVE"
+                      ? "#D1FAE5"
+                      : statusText === "PAUSED"
+                      ? "#FEF3C7"
+                      : "#F3F4F6",
                 },
               ]}
             >
-              {isPaused ? "Resume" : "Pause"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => handleDelete(item.id, item.name)}
-          >
-            <Ionicons name="trash-outline" size={16} color="#E53935" />
-            <Text style={[styles.actionText, { color: "#E53935" }]}>
-              Delete
-            </Text>
-          </TouchableOpacity>
+              <Text
+                style={[
+                  styles.statusText,
+                  {
+                    color:
+                      statusText === "ACTIVE"
+                        ? "#065F46"
+                        : statusText === "PAUSED"
+                        ? "#92400E"
+                        : "#374151",
+                  },
+                ]}
+              >
+                {statusText}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.adSetActions}>
+            <View style={styles.actionButtonsContainer}>
+              {isPaused ? (
+                <TouchableOpacity
+                  style={styles.actionIconButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handlePauseResume(item.id, status);
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="play"
+                    size={20}
+                    color="#059669"
+                  />
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={styles.actionIconButton}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    handlePauseResume(item.id, status);
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="pause"
+                    size={20}
+                    color="#F59E0B"
+                  />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={styles.actionIconButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleDelete(item.id, item.name);
+                }}
+              >
+                <Ionicons name="trash-outline" size={20} color="#DC2626" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.viewAdsContainer}>
+              <Text style={styles.viewAdsText}>View Ads</Text>
+              <Ionicons name="chevron-forward" size={20} color="white" />
+            </View>
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -464,7 +518,7 @@ export default function AdSetsScreen() {
 
           <FlatList
             data={filteredAdSets}
-            renderItem={renderAdSetItem}
+            renderItem={({ item, index }) => renderAdSetItem({ item, index })}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
             refreshControl={
@@ -650,101 +704,141 @@ const styles = StyleSheet.create({
     paddingTop: 0,
   },
   adSetCard: {
-    backgroundColor: "white",
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 16,
+    padding: 20,
     marginBottom: 16,
+    marginHorizontal: 2,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  gradientOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    borderBottomRightRadius: 16,
+  },
+  decorativeCircle1: {
+    position: "absolute",
+    top: -40,
+    right: -40,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  decorativeCircle2: {
+    position: "absolute",
+    bottom: -30,
+    left: -30,
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  adSetContent: {
+    position: "relative",
+    zIndex: 10,
+  },
+  adSetHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  adSetNameContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  adSetName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "white",
+    marginBottom: 6,
+  },
+  adSetId: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.75)",
+    marginBottom: 4,
+  },
+  adSetBudget: {
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "500",
+    marginBottom: 8,
+  },
+  optimizationBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(220, 38, 38, 1)",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 4,
+  },
+  optimizationText: {
+    color: "white",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  statusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    minWidth: 70,
+    alignItems: "center",
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+  },
+  adSetActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.2)",
+    paddingTop: 16,
+    marginTop: 16,
+  },
+  actionButtonsContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  actionIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
     shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 3.84,
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
     elevation: 3,
   },
-  adSetHeader: {
+  viewAdsContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 12,
+    gap: 4,
   },
-  adSetName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    flex: 1,
-    marginRight: 12,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
+  viewAdsText: {
     color: "white",
-    fontSize: 12,
-    fontWeight: "bold",
-  },
-  adSetDetails: {
-    marginBottom: 16,
-  },
-  detailRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  detailItem: {
-    flex: 1,
-  },
-  detailLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 4,
-  },
-  detailValue: {
     fontSize: 14,
-    fontWeight: "500",
-  },
-  additionalInfo: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-  },
-  infoRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  infoText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: "#666",
-    flex: 1,
-  },
-  adSetActions: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    borderTopWidth: 1,
-    borderTopColor: "#f0f0f0",
-    paddingTop: 16,
-    gap: 8,
-  },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    backgroundColor: "#f0f2f5",
-  },
-  viewAdsButton: {
-    backgroundColor: "#e3f2fd",
-  },
-  actionText: {
-    marginLeft: 6,
-    fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   emptyState: {
     alignItems: "center",
