@@ -51,6 +51,13 @@ import LinkCampaign from "../../Components/meta/Link/LinkCampaign";
 import LinkAdSet from "../../Components/meta/Link/LinkAdSet";
 import LinkAdCreative from "../../Components/meta/Link/LinkAdCreative";
 import LinkLaunch from "../../Components/meta/Link/LinkLaunch";
+// Lead Form Components
+import LeadFormCampaign from "../../Components/meta/LeadForm/LeadFormCampaign";
+import LeadFormForm from "../../Components/meta/LeadForm/LeadFormForm";
+import LeadFormAdSet from "../../Components/meta/LeadForm/LeadFormAdSet";
+import LeadFormAdCreative from "../../Components/meta/LeadForm/LeadFormAdCreative";
+import LeadFormLaunch from "../../Components/meta/LeadForm/LeadFormLaunch";
+import SubscribePageWebhooks from "../../Components/meta/LeadForm/SubscribePageWebhooks";
 
 // Header Component
 const Header = ({ userId }) => (
@@ -3723,40 +3730,14 @@ const MetaAdsScreen = () => {
                     />
                   )}
                   {campaignType === "lead-form" && (
-                    <>
-                      <CampaignDetails
-                        campaignName={campaignName}
-                        setCampaignName={setCampaignName}
-                        budget={budget}
-                        setBudget={setBudget}
-                        objective={objective}
-                        setObjective={setObjective}
-                        destinationType={destinationType}
-                        setDestinationType={setDestinationType}
-                        whatsappNumber={whatsappNumber}
-                        setWhatsappNumber={setWhatsappNumber}
-                        campaignType={campaignType}
-                      />
-                      <View style={{ flexDirection: "row", gap: 15, marginTop: 20 }}>
-                        <TouchableOpacity
-                          style={[styles.launchButton, { flex: 1, backgroundColor: "#8B9DC3" }]}
-                          onPress={() => setStep(0)}
-                        >
-                          <Text style={styles.launchButtonText}>Back</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[styles.launchButton, { flex: 1 }, isLoading && styles.launchButtonDisabled]}
-                          onPress={handleCreateCampaign}
-                          disabled={isLoading || !campaignName.trim()}
-                        >
-                          {isLoading ? (
-                            <ActivityIndicator color="#fff" />
-                          ) : (
-                            <Text style={styles.launchButtonText}>Create Campaign</Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </>
+                    <LeadFormCampaign
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedCampaignId(data.campaign_id);
+                        setStep(2);
+                      }}
+                      onBack={() => setStep(0)}
+                    />
                   )}
                 </>
               )}
@@ -3797,99 +3778,14 @@ const MetaAdsScreen = () => {
                     />
                   )}
                   {campaignType === "lead-form" && (
-                    <>
-                      <AdSetDetails
-                        adSetName={adSetName}
-                        setAdSetName={setAdSetName}
-                        budget={budget}
-                        setBudget={setBudget}
-                        pageId={pageId}
-                        setPageId={setPageId}
-                        pages={pages}
-                        loadingPages={loadingPages}
-                        optimizationGoal={optimizationGoal}
-                        setOptimizationGoal={setOptimizationGoal}
-                        allowedOptimizationGoals={allowedOptimizationGoals}
-                        optimizationGoalNames={optimizationGoalNames}
-                        campaignObjectiveNames={campaignObjectiveNames}
-                        campaignObjective={campaignObjective}
-                        objective={objective}
-                        destinationType={destinationType}
-                        setDestinationType={setDestinationType}
-                        whatsappNumber={whatsappNumber}
-                        setWhatsappNumber={setWhatsappNumber}
-                        bidStrategy={bidStrategy}
-                        setBidStrategy={setBidStrategy}
-                        bidAmount={bidAmount}
-                        setBidAmount={setBidAmount}
-                        bidConstraints={bidConstraints}
-                        setBidConstraints={setBidConstraints}
-                        appId={appId}
-                        setAppId={setAppId}
-                        objectStoreUrl={objectStoreUrl}
-                        setObjectStoreUrl={setObjectStoreUrl}
-                        pixelId={pixelId}
-                        setPixelId={setPixelId}
-                        conversionEvent={conversionEvent}
-                        setConversionEvent={setConversionEvent}
-                        targeting={targeting}
-                        setTargeting={setTargeting}
-                        customLocations={customLocations}
-                        setCustomLocations={setCustomLocations}
-                        selectedPlace={selectedPlace}
-                        setSelectedPlace={setSelectedPlace}
-                        handlePlaceSelect={handlePlaceSelect}
-                        publisherPlatforms={publisherPlatforms}
-                        setPublisherPlatforms={setPublisherPlatforms}
-                        facebookPositions={facebookPositions}
-                        setFacebookPositions={setFacebookPositions}
-                        instagramPositions={instagramPositions}
-                        setInstagramPositions={setInstagramPositions}
-                        devicePlatforms={devicePlatforms}
-                        setDevicePlatforms={setDevicePlatforms}
-                        genders={genders}
-                        setGenders={setGenders}
-                        campaignType={campaignType}
-                      />
-                      <View style={{ flexDirection: "row", gap: 15, marginTop: 20 }}>
-                        <TouchableOpacity
-                          style={[styles.launchButton, { flex: 1, backgroundColor: "#8B9DC3" }]}
-                          onPress={() => setStep(1)}
-                        >
-                          <Text style={styles.launchButtonText}>Back</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.launchButton,
-                            { flex: 1 },
-                            isLoading && styles.launchButtonDisabled,
-                          ]}
-                          onPress={handleCreateAdSet}
-                          disabled={
-                            isLoading ||
-                            !adSetName.trim() ||
-                            !budget ||
-                            parseFloat(budget) < 225 ||
-                            customLocations.length === 0 ||
-                            publisherPlatforms.length === 0 ||
-                            ((campaignObjective || objective) !== "OUTCOME_ENGAGEMENT" && !pageId) ||
-                            ((campaignObjective || objective) !== "OUTCOME_LEADS" && (campaignObjective || objective) !== "OUTCOME_AWARENESS" && !destinationType) ||
-                            (destinationType === "WHATSAPP" && !whatsappNumber) ||
-                            ((optimizationGoal === "APP_INSTALLS" || optimizationGoal === "APP_ENGAGEMENT") && (!appId || !objectStoreUrl)) ||
-                            (optimizationGoal === "OFFSITE_CONVERSIONS" && (!pixelId || !conversionEvent)) ||
-                            (bidStrategy === "LOWEST_COST_WITH_BID_CAP" && (!bidAmount || parseFloat(bidAmount) <= 0)) ||
-                            (bidStrategy === "COST_CAP" && (!bidAmount || parseFloat(bidAmount) <= 0)) ||
-                            (bidStrategy === "LOWEST_COST_WITH_MIN_ROAS" && (!bidConstraints.roas_average_floor || parseFloat(bidConstraints.roas_average_floor) <= 0))
-                          }
-                        >
-                          {isLoading ? (
-                            <ActivityIndicator color="#fff" />
-                          ) : (
-                            <Text style={styles.launchButtonText}>Create AdSet</Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </>
+                    <LeadFormForm
+                      campaignData={campaignData}
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setStep(3);
+                      }}
+                      onBack={() => setStep(1)}
+                    />
                   )}
                 </>
               )}
@@ -3930,102 +3826,15 @@ const MetaAdsScreen = () => {
                     />
                   )}
                   {campaignType === "lead-form" && (
-                    <>
-                      {/* AdCreative Form - Step 3 - matching web flow */}
-                      <View style={styles.section}>
-                        <SectionHeader title="Step 3: Create Ad Creative" step={3} totalSteps={4} />
-                        
-                        <View style={styles.inputContainer}>
-                          <Text style={styles.inputLabel}>Ad Creative Name <Text style={{ color: "#FF0000" }}>*</Text></Text>
-                          <TextInput
-                            style={styles.input}
-                            placeholder="Enter ad creative name"
-                            value={creativeName}
-                            onChangeText={setCreativeName}
-                          />
-                        </View>
-
-                        <View style={styles.inputContainer}>
-                          <Text style={styles.inputLabel}>Page ID <Text style={{ color: "#FF0000" }}>*</Text></Text>
-                          {loadingPages ? (
-                            <View style={[styles.input, { backgroundColor: "#F5F5F5" }]}>
-                              <Text style={{ color: "#999" }}>Loading pages...</Text>
-                            </View>
-                          ) : pages.length > 0 ? (
-                            <CustomSelect
-                              options={pages.map(page => ({ label: `${page.name} (${page.id})`, value: page.id }))}
-                              value={creativePageId}
-                              onValueChange={setCreativePageId}
-                              placeholder="Select a Facebook Page"
-                            />
-                          ) : (
-                            <TextInput
-                              style={styles.input}
-                              placeholder="Enter your Facebook Page ID"
-                              value={creativePageId}
-                              onChangeText={setCreativePageId}
-                            />
-                          )}
-                          <Text style={styles.inputHint}>Your Facebook Page ID where the ad will appear</Text>
-                        </View>
-
-                        <View style={styles.inputContainer}>
-                          <Text style={styles.inputLabel}>Picture URL <Text style={{ color: "#FF0000" }}>*</Text></Text>
-                          <TextInput
-                            style={styles.input}
-                            placeholder="https://example.com/image.jpg"
-                            value={pictureUrl}
-                            onChangeText={setPictureUrl}
-                            keyboardType="url"
-                            autoCapitalize="none"
-                          />
-                          <Text style={styles.inputHint}>URL of the image for your ad (must be publicly accessible)</Text>
-                        </View>
-
-                        <View style={styles.inputContainer}>
-                          <Text style={styles.inputLabel}>Business Page URL <Text style={{ color: "#FF0000" }}>*</Text></Text>
-                          <TextInput
-                            style={styles.input}
-                            placeholder="https://yourbusiness.com"
-                            value={businessPageUrl}
-                            onChangeText={setBusinessPageUrl}
-                            keyboardType="url"
-                            autoCapitalize="none"
-                          />
-                          <Text style={styles.inputHint}>URL of your business page or website</Text>
-                        </View>
-                      </View>
-
-                      <View style={{ flexDirection: "row", gap: 15, marginTop: 20 }}>
-                        <TouchableOpacity
-                          style={[styles.launchButton, { flex: 1, backgroundColor: "#8B9DC3" }]}
-                          onPress={() => setStep(2)}
-                        >
-                          <Text style={styles.launchButtonText}>Back</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.launchButton,
-                            { flex: 1 },
-                            isLoading && styles.launchButtonDisabled,
-                          ]}
-                          onPress={handleCreateAdCreative}
-                          disabled={
-                            isLoading ||
-                            !creativeName.trim() ||
-                            !creativePageId.trim() ||
-                            !pictureUrl.trim() ||
-                            !businessPageUrl.trim()
-                          }
-                        >
-                          {isLoading ? (
-                            <ActivityIndicator color="#fff" />
-                          ) : (
-                            <Text style={styles.launchButtonText}>Create Ad Creative</Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </>
+                    <LeadFormAdSet
+                      campaignData={campaignData}
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedAdSetId(data.adset_id);
+                        setStep(4);
+                      }}
+                      onBack={() => setStep(2)}
+                    />
                   )}
                 </>
               )}
@@ -4078,57 +3887,55 @@ const MetaAdsScreen = () => {
                     />
                   )}
                   {campaignType === "lead-form" && (
-                    <>
-                      {/* Ad Creation - Step 4 - simplified for Call campaigns */}
-                      <View style={styles.section}>
-                        <SectionHeader title="Step 4: Create Ad" step={4} totalSteps={4} />
-                        
-                        <View style={styles.inputContainer}>
-                          <Text style={styles.inputLabel}>Ad Name <Text style={{ color: "#FF0000" }}>*</Text></Text>
-                          <TextInput
-                            style={styles.input}
-                            placeholder="Enter ad name"
-                            value={adName}
-                            onChangeText={setAdName}
-                          />
-                        </View>
-
-                        {createdCreativeId && (
-                          <View style={{ marginTop: 15, padding: 10, backgroundColor: "#E3F2FD", borderRadius: 8 }}>
-                            <Text style={[styles.inputLabel, { fontSize: 12 }]}>Creative ID:</Text>
-                            <Text style={[styles.inputHint, { fontWeight: "600", marginTop: 4 }]}>
-                              {createdCreativeId}
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-
-                      <View style={{ flexDirection: "row", gap: 15, marginTop: 20 }}>
-                        <TouchableOpacity
-                          style={[styles.launchButton, { flex: 1, backgroundColor: "#8B9DC3" }]}
-                          onPress={() => setStep(3)}
-                        >
-                          <Text style={styles.launchButtonText}>Back</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[
-                            styles.launchButton,
-                            { flex: 1, backgroundColor: "#4CAF50" },
-                            isLoading && styles.launchButtonDisabled,
-                          ]}
-                          onPress={handleCreateAd}
-                          disabled={isLoading || !adName.trim() || !createdCreativeId}
-                        >
-                          {isLoading ? (
-                            <ActivityIndicator color="#fff" />
-                          ) : (
-                            <Text style={styles.launchButtonText}>Launch Ad</Text>
-                          )}
-                        </TouchableOpacity>
-                      </View>
-                    </>
+                    <LeadFormAdCreative
+                      campaignData={campaignData}
+                      onNext={(data) => {
+                        setCampaignData(data);
+                        setCreatedCreativeId(data.creative_id);
+                        setStep(5);
+                      }}
+                      onBack={() => setStep(3)}
+                    />
                   )}
                 </>
+              )}
+
+              {step === 5 && campaignType === "lead-form" && (
+                <LeadFormLaunch
+                  campaignData={campaignData}
+                  onComplete={(data) => {
+                    if (data?.goToSubscribe) {
+                      // Navigate to subscribe webhooks step
+                      setStep(6);
+                    } else {
+                      // Go back to overview
+                      setStep(0);
+                      setCampaignType(null);
+                      setCampaignData({});
+                      setCreatedCampaignId(null);
+                      setCreatedAdSetId(null);
+                      setCreatedCreativeId(null);
+                      setActiveTab("overview");
+                    }
+                  }}
+                  onBack={() => setStep(4)}
+                />
+              )}
+
+              {step === 6 && campaignType === "lead-form" && (
+                <SubscribePageWebhooks
+                  campaignData={campaignData}
+                  onComplete={() => {
+                    setStep(0);
+                    setCampaignType(null);
+                    setCampaignData({});
+                    setCreatedCampaignId(null);
+                    setCreatedAdSetId(null);
+                    setCreatedCreativeId(null);
+                    setActiveTab("overview");
+                  }}
+                  onBack={() => setStep(5)}
+                />
               )}
             </>
           ) : (
