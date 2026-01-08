@@ -35,6 +35,8 @@ export default function CallLaunch({ campaignData, onComplete, onBack }) {
     setLoading(true);
     try {
       const adPayload = {
+        act_ad_account_id: actAdAccountId,
+        fb_token: fbToken,
         adset_id: campaignData.adset_id,
         creative_id: campaignData.creative_id,
         status: "PAUSED",
@@ -46,8 +48,6 @@ export default function CallLaunch({ campaignData, onComplete, onBack }) {
         {
           headers: {
             "Content-Type": "application/json",
-            "act_ad_account_id": actAdAccountId,
-            "fb_token": fbToken,
           },
         }
       );

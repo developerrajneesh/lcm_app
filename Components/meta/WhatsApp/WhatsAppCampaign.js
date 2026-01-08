@@ -36,6 +36,8 @@ export default function WhatsAppCampaign({ onNext, onBack }) {
     setLoading(true);
     try {
       const campaignPayload = {
+        act_ad_account_id: actAdAccountId,
+        fb_token: fbToken,
         name: campaignName,
         objective: "OUTCOME_ENGAGEMENT",
         special_ad_categories: ["NONE"],
@@ -48,8 +50,6 @@ export default function WhatsAppCampaign({ onNext, onBack }) {
         {
           headers: {
             "Content-Type": "application/json",
-            "act_ad_account_id": actAdAccountId,
-            "fb_token": fbToken,
           },
         }
       );

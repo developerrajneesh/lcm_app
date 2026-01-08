@@ -334,6 +334,8 @@ export default function WhatsAppAdSet({ campaignData, onNext, onBack }) {
       }
 
       const adsetPayload = {
+        act_ad_account_id: actAdAccountId,
+        fb_token: fbToken,
         name: formData.name,
         campaign_id: campaignData.campaign_id,
         daily_budget: formData.daily_budget.toString(),
@@ -351,8 +353,6 @@ export default function WhatsAppAdSet({ campaignData, onNext, onBack }) {
         {
           headers: {
             "Content-Type": "application/json",
-            "act_ad_account_id": actAdAccountId,
-            "fb_token": fbToken,
           },
         }
       );

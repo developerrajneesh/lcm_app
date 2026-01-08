@@ -98,6 +98,8 @@ export default function WhatsAppAdCreative({ campaignData, onNext, onBack }) {
     setLoading(true);
     try {
       const creativePayload = {
+        act_ad_account_id: actAdAccountId,
+        fb_token: fbToken,
         name: formData.name,
         page_id: formData.page_id,
         picture_url: formData.picture_url,
@@ -110,8 +112,6 @@ export default function WhatsAppAdCreative({ campaignData, onNext, onBack }) {
         {
           headers: {
             "Content-Type": "application/json",
-            "act_ad_account_id": actAdAccountId,
-            "fb_token": fbToken,
           },
         }
       );

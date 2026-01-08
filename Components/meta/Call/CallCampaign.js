@@ -44,6 +44,8 @@ export default function CallCampaign({ onNext, onBack }) {
     setLoading(true);
     try {
       const campaignPayload = {
+        act_ad_account_id: actAdAccountId,
+        fb_token: fbToken,
         name: campaignName,
         objective: objective,
         special_ad_categories: ["NONE"],
@@ -56,8 +58,6 @@ export default function CallCampaign({ onNext, onBack }) {
         {
           headers: {
             "Content-Type": "application/json",
-            "act_ad_account_id": actAdAccountId,
-            "fb_token": fbToken,
           },
         }
       );

@@ -180,7 +180,11 @@ const AuthModal = ({ visible, onClose }) => {
     try {
       // Remove confirmPassword before sending to API
       const { confirmPassword, ...apiData } = signupData;
-      const response = await registerUser(apiData);
+      // Add signupSource for app registrations
+      const response = await registerUser({
+        ...apiData,
+        signupSource: "app",
+      });
       if (response.success) {
         setCurrentScreen("otp");
       } else {

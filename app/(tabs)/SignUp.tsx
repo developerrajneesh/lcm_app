@@ -131,6 +131,8 @@ const SignUpScreen = () => {
         password: signupData.password,
         phoneNumber: signupData.phoneNumber.trim(),
         profileImage: signupData.profileImage,
+        referralCode: signupData.referralCode.trim().toUpperCase() || undefined,
+        signupSource: "app",
       });
 
       if (response.data.success) {
