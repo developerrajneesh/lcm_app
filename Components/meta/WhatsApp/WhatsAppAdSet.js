@@ -36,7 +36,12 @@ export default function WhatsAppAdSet({ campaignData, onNext, onBack }) {
   const [loadingPages, setLoadingPages] = useState(false);
   const [customLocations, setCustomLocations] = useState([]);
   const [selectedPlace, setSelectedPlace] = useState(null);
+  const [expandedLocations, setExpandedLocations] = useState(new Set()); // Track which location cards are expanded
   const [loading, setLoading] = useState(false);
+  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [verificationStatus, setVerificationStatus] = useState(null); // null, "VERIFIED", "VERIFICATION_CODE_SEND_SUCCESS"
+  const [verificationCode, setVerificationCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
 
   const countries = [
     { code: "US", name: "United States", flag: "🇺🇸" },
@@ -243,6 +248,69 @@ export default function WhatsAppAdSet({ campaignData, onNext, onBack }) {
     }
   };
 
+  const handleVerifyWhatsAppNumber = async () => {
+    if (!whatsappNumber.trim()) {
+      Alert.alert("Error", "Please enter WhatsApp number");
+      return;
+    }
+    if (!formData.page_id) {
+      Alert.alert("Error", "Please select a Page ID first");
+      return;
+    }
+
+    setVerifying(true);
+    try {
+      const fbToken = await AsyncStorage.getItem("fb_access_token") || await AsyncStorage.getItem("fb_token");
+      
+      if (!fbToken) {
+        Alert.alert("Error", "Please connect your Facebook account first");
+        return;
+      }
+
+      const payload = {
+        page_id: formData.page_id,
+        fb_token: fbToken,
+        whatsapp_number: whatsappNumber,
+      };
+      
+      if (verificationCode) {
+        payload.verification_code = verificationCode;
+      }
+
+      const response = await axios.post(
+        `${API_BASE_URL}/click-to-whatsapp/verify-whatsapp-number`,
+        payload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (response.data?.success && response.data?.data) {
+        const verificationStatus = response.data.data.verification_status;
+        
+        if (verificationStatus === "VERIFIED") {
+          setVerificationStatus("VERIFIED");
+          setVerificationCode("");
+          Alert.alert("Success", "WhatsApp number verified successfully!");
+        } else if (verificationStatus === "VERIFICATION_CODE_SEND_SUCCESS") {
+          setVerificationStatus("VERIFICATION_CODE_SEND_SUCCESS");
+          Alert.alert("Code Sent", "Verification code sent successfully! Please check your WhatsApp and enter the code.");
+        } else {
+          Alert.alert("Info", `Verification status: ${verificationStatus || "Unknown"}`);
+        }
+      } else {
+        Alert.alert("Error", "Invalid response from server");
+      }
+    } catch (error) {
+      Alert.alert("Error", error.response?.data?.error || error.message || "Failed to verify WhatsApp number");
+      console.error("WhatsApp verification error:", error);
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
       Alert.alert("Error", "Please enter ad set name");
@@ -250,6 +318,11 @@ export default function WhatsAppAdSet({ campaignData, onNext, onBack }) {
     }
     if (!formData.daily_budget) {
       Alert.alert("Error", "Please enter daily budget");
+      return;
+    }
+    const budgetAmount = parseFloat(formData.daily_budget);
+    if (isNaN(budgetAmount) || budgetAmount <= 0) {
+      Alert.alert("Error", "Please enter a valid daily budget amount");
       return;
     }
     if (!formData.page_id.trim()) {
@@ -290,6 +363,15 @@ export default function WhatsAppAdSet({ campaignData, onNext, onBack }) {
     }
     if (!campaignData?.campaign_id) {
       Alert.alert("Error", "Campaign ID is missing. Please create campaign first.");
+      return;
+    }
+    // Validate WhatsApp number verification
+    if (!whatsappNumber.trim()) {
+      Alert.alert("Error", "Please enter WhatsApp number and verify it before creating the ad set");
+      return;
+    }
+    if (verificationStatus !== "VERIFIED") {
+      Alert.alert("Error", "Please verify your WhatsApp number before creating the ad set. Click the 'Verify' button to verify your number.");
       return;
     }
 
@@ -338,7 +420,7 @@ export default function WhatsAppAdSet({ campaignData, onNext, onBack }) {
         fb_token: fbToken,
         name: formData.name,
         campaign_id: campaignData.campaign_id,
-        daily_budget: formData.daily_budget.toString(),
+        daily_budget: (parseFloat(formData.daily_budget) * 100).toString(), // Convert rupees to paise (×100)
         page_id: formData.page_id,
         destination_type: "WHATSAPP",
         optimization_goal: "CONVERSATIONS",
@@ -448,17 +530,122 @@ export default function WhatsAppAdSet({ campaignData, onNext, onBack }) {
           </View>
           <View style={[styles.inputContainer, { flex: 1 }]}>
             <Text style={styles.label}>
-              Daily Budget <Text style={styles.required}>*</Text>
+              Daily Budget (₹) <Text style={styles.required}>*</Text>
             </Text>
             <TextInput
               style={styles.input}
-              placeholder="Enter daily budget"
+              placeholder="Enter amount in rupees (e.g., 500)"
               keyboardType="numeric"
               value={formData.daily_budget}
               onChangeText={(text) => setFormData({ ...formData, daily_budget: text })}
             />
+            <Text style={[styles.hint, { fontSize: 11, marginTop: 4 }]}>
+              Amount will be converted to paise (×100) when submitting
+            </Text>
           </View>
-        </View>
+          </View>
+
+          {/* WhatsApp Number Verification */}
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>
+              WhatsApp Number <Text style={styles.required}>*</Text>
+            </Text>
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <View style={{ flex: 1, position: "relative" }}>
+                <TextInput
+                  style={[
+                    styles.input,
+                    verificationStatus === "VERIFIED" && { paddingRight: 40 }
+                  ]}
+                  placeholder="Enter WhatsApp number (e.g., 919565347000)"
+                  keyboardType="phone-pad"
+                  value={whatsappNumber}
+                  onChangeText={(text) => {
+                    setWhatsappNumber(text);
+                    // Reset verification status when number changes
+                    if (verificationStatus) {
+                      setVerificationStatus(null);
+                      setVerificationCode("");
+                    }
+                  }}
+                  editable={verificationStatus !== "VERIFIED"}
+                />
+                {verificationStatus === "VERIFIED" && (
+                  <View style={{ position: "absolute", right: 12, top: 12 }}>
+                    <MaterialCommunityIcons name="check-circle" size={24} color="#10B981" />
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity
+                style={[
+                  styles.verifyButton,
+                  (verifying || !whatsappNumber.trim() || !formData.page_id || verificationStatus === "VERIFIED") && styles.verifyButtonDisabled
+                ]}
+                onPress={handleVerifyWhatsAppNumber}
+                disabled={verifying || !whatsappNumber.trim() || !formData.page_id || verificationStatus === "VERIFIED"}
+              >
+                {verifying ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.verifyButtonText}>
+                    {verificationStatus === "VERIFIED" ? "Verified" : "Verify"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+            
+            {/* OTP Input Field - Show when verification code is sent */}
+            {verificationStatus === "VERIFICATION_CODE_SEND_SUCCESS" && (
+              <View style={[styles.inputContainer, { backgroundColor: "#E3F2FD", padding: 15, borderRadius: 8, marginTop: 15 }]}>
+                <Text style={styles.label}>Enter Verification Code</Text>
+                <View style={{ flexDirection: "row", gap: 10, marginTop: 8 }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1 }]}
+                    placeholder="Enter OTP code"
+                    keyboardType="number-pad"
+                    value={verificationCode}
+                    onChangeText={setVerificationCode}
+                  />
+                  <TouchableOpacity
+                    style={[
+                      styles.verifyButton,
+                      (verifying || !verificationCode.trim()) && styles.verifyButtonDisabled
+                    ]}
+                    onPress={handleVerifyWhatsAppNumber}
+                    disabled={verifying || !verificationCode.trim()}
+                  >
+                    {verifying ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={styles.verifyButtonText}>Verify OTP</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.hint, { marginTop: 8 }]}>
+                  A verification code has been sent to your WhatsApp number. Please enter it above.
+                </Text>
+              </View>
+            )}
+
+            {/* Success Message */}
+            {verificationStatus === "VERIFIED" && (
+              <View style={[styles.inputContainer, { backgroundColor: "#D1FAE5", padding: 12, borderRadius: 8, marginTop: 10 }]}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <MaterialCommunityIcons name="check-circle" size={20} color="#10B981" />
+                  <Text style={{ color: "#065F46", fontSize: 14, fontWeight: "600" }}>
+                    WhatsApp number verified successfully!
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Helper Text */}
+            {verificationStatus !== "VERIFIED" && (
+              <Text style={styles.hint}>
+                <Text style={styles.required}>*</Text> WhatsApp number verification is required to create the ad set.
+              </Text>
+            )}
+          </View>
 
         <View style={{ marginTop: 20, borderTopWidth: 1, borderTopColor: "#E4E6EB", paddingTop: 20 }}>
           <Text style={[styles.label, { fontSize: 18, marginBottom: 15 }]}>Targeting</Text>
@@ -502,47 +689,98 @@ export default function WhatsAppAdSet({ campaignData, onNext, onBack }) {
             <View style={[styles.inputContainer, { backgroundColor: "#E3F2FD", padding: 15, borderRadius: 8, marginBottom: 15 }]}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <Text style={[styles.label, { fontSize: 14 }]}>Custom Locations ({customLocations.length})</Text>
-                <TouchableOpacity onPress={() => { setCustomLocations([]); setSelectedPlace(null); }}>
+                <TouchableOpacity onPress={() => { 
+                  setCustomLocations([]); 
+                  setSelectedPlace(null);
+                  setExpandedLocations(new Set());
+                }}>
                   <Text style={{ color: "#E53935", fontSize: 12, fontWeight: "600" }}>Clear All</Text>
                 </TouchableOpacity>
               </View>
-              {customLocations.map((loc, idx) => (
-                <View key={idx} style={{ backgroundColor: "#fff", padding: 12, borderRadius: 8, marginBottom: 10 }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                    <View style={{ flex: 1 }}>
-                      {loc.name && <Text style={[styles.label, { fontSize: 13, marginBottom: 4 }]}>{loc.name}</Text>}
-                      {loc.address && <Text style={[styles.hint, { fontSize: 11, marginBottom: 4 }]}>{loc.address}</Text>}
-                      <Text style={[styles.hint, { fontSize: 10, fontFamily: "monospace" }]}>
-                        Lat: {loc.latitude.toFixed(6)}, Lng: {loc.longitude.toFixed(6)}
-                      </Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setCustomLocations(customLocations.filter((_, i) => i !== idx))}>
-                      <MaterialCommunityIcons name="close" size={18} color="#606770" />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={[styles.hint, { fontSize: 12 }]}>Radius:</Text>
-                    <TextInput
-                      style={[styles.input, { width: 60, paddingVertical: 6, paddingHorizontal: 8, fontSize: 12 }]}
-                      value={loc.radius.toString()}
-                      onChangeText={(text) => {
-                        const newLocations = [...customLocations];
-                        const newRadius = parseInt(text);
-                        if (!isNaN(newRadius)) {
-                          if (newRadius < 2) newLocations[idx].radius = 2;
-                          else if (newRadius > 17) newLocations[idx].radius = 17;
-                          else newLocations[idx].radius = newRadius;
+              {customLocations.map((loc, idx) => {
+                const isExpanded = expandedLocations.has(idx);
+                return (
+                  <View key={idx} style={{ backgroundColor: "#fff", borderRadius: 8, marginBottom: 10, overflow: "hidden", borderWidth: 1, borderColor: "#BBDEFB" }}>
+                    {/* Accordion Header */}
+                    <TouchableOpacity
+                      onPress={() => {
+                        const newExpanded = new Set(expandedLocations);
+                        if (isExpanded) {
+                          newExpanded.delete(idx);
                         } else {
-                          newLocations[idx].radius = 5;
+                          newExpanded.add(idx);
                         }
-                        setCustomLocations(newLocations);
+                        setExpandedLocations(newExpanded);
                       }}
-                      keyboardType="numeric"
-                    />
-                    <Text style={[styles.hint, { fontSize: 12 }]}>km</Text>
+                      style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 12 }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        {loc.name && <Text style={[styles.label, { fontSize: 13, marginBottom: 4 }]}>{loc.name}</Text>}
+                        {loc.address && <Text style={[styles.hint, { fontSize: 11 }]} numberOfLines={1}>{loc.address}</Text>}
+                      </View>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <TouchableOpacity
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            setCustomLocations(customLocations.filter((_, i) => i !== idx));
+                            const newExpanded = new Set(expandedLocations);
+                            newExpanded.delete(idx);
+                            // Adjust indices for remaining items
+                            const adjustedExpanded = new Set();
+                            newExpanded.forEach((expandedIdx) => {
+                              if (expandedIdx > idx) {
+                                adjustedExpanded.add(expandedIdx - 1);
+                              } else if (expandedIdx < idx) {
+                                adjustedExpanded.add(expandedIdx);
+                              }
+                            });
+                            setExpandedLocations(adjustedExpanded);
+                          }}
+                        >
+                          <MaterialCommunityIcons name="close" size={18} color="#606770" />
+                        </TouchableOpacity>
+                        <MaterialCommunityIcons 
+                          name={isExpanded ? "chevron-up" : "chevron-down"} 
+                          size={20} 
+                          color="#606770" 
+                        />
+                      </View>
+                    </TouchableOpacity>
+                    {/* Accordion Content */}
+                    {isExpanded && (
+                      <View style={{ paddingHorizontal: 12, paddingBottom: 12, borderTopWidth: 1, borderTopColor: "#E0E0E0" }}>
+                        <View style={{ marginTop: 8, marginBottom: 8 }}>
+                          <Text style={[styles.hint, { fontSize: 10, fontFamily: "monospace" }]}>
+                            Lat: {loc.latitude.toFixed(6)}, Lng: {loc.longitude.toFixed(6)}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                          <Text style={[styles.hint, { fontSize: 12 }]}>Radius:</Text>
+                          <TextInput
+                            style={[styles.input, { width: 60, paddingVertical: 6, paddingHorizontal: 8, fontSize: 12 }]}
+                            value={loc.radius.toString()}
+                            onChangeText={(text) => {
+                              const newLocations = [...customLocations];
+                              const newRadius = parseInt(text);
+                              if (!isNaN(newRadius)) {
+                                if (newRadius < 2) newLocations[idx].radius = 2;
+                                else if (newRadius > 17) newLocations[idx].radius = 17;
+                                else newLocations[idx].radius = newRadius;
+                              } else {
+                                newLocations[idx].radius = 5;
+                              }
+                              setCustomLocations(newLocations);
+                            }}
+                            keyboardType="numeric"
+                          />
+                          <Text style={[styles.hint, { fontSize: 12 }]}>km</Text>
+                        </View>
+                      </View>
+                    )}
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
@@ -928,6 +1166,23 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  verifyButton: {
+    backgroundColor: "#9333EA",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    minWidth: 100,
+  },
+  verifyButtonDisabled: {
+    opacity: 0.5,
+  },
+  verifyButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });
 

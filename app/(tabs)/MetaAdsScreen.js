@@ -4070,7 +4070,8 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     alignItems: "center",
-    position: "relative",
+    justifyContent: "center",
+    // position: "relative",
   },
   tabText: {
     color: "#606770",

@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   RefreshControl,
+  Linking,
+  Alert,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -43,6 +45,36 @@ export default function AccountOverview() {
       }
     }
     return null;
+  };
+
+  // Extract account ID without "act_" prefix
+  const getAccountIdWithoutPrefix = (accountId) => {
+    if (!accountId) return "";
+    // Remove "act_" prefix if present
+    return accountId.startsWith("act_") ? accountId.substring(4) : accountId;
+  };
+
+  // Handle Add Funds button click
+  const handleAddFunds = async () => {
+    if (!selectedAccountId) {
+      Alert.alert("Error", "Please select an ad account first");
+      return;
+    }
+    
+    const accountIdWithoutPrefix = getAccountIdWithoutPrefix(selectedAccountId);
+    const billingUrl = `https://business.facebook.com/billing_hub/payment_activity?asset_id=${accountIdWithoutPrefix}&placement=ads_manager&payment_account_id=${accountIdWithoutPrefix}`;
+    
+    try {
+      const canOpen = await Linking.canOpenURL(billingUrl);
+      if (canOpen) {
+        await Linking.openURL(billingUrl);
+      } else {
+        Alert.alert("Error", "Unable to open billing page. Please try again later.");
+      }
+    } catch (error) {
+      console.error("Error opening billing URL:", error);
+      Alert.alert("Error", "Failed to open billing page. Please try again later.");
+    }
   };
 
   // Fetch available ad accounts
@@ -342,37 +374,49 @@ export default function AccountOverview() {
           )}
         </View>
 
-        {/* Available Funds Box */}
+        {/* Available Funds and Add Funds Row */}
         {selectedAccountId && (
-          <View style={styles.fundsBox}>
-            <Text style={styles.fundsLabel}>Available Funds:</Text>
-            <View style={styles.fundsContent}>
-              {fundsLoading ? (
-                <ActivityIndicator size="small" color="#10B981" />
-              ) : availableFunds ? (
-                <Text style={styles.fundsAmount}>
-                  {availableFunds.currency} {availableFunds.amount.toFixed(2)}
-                </Text>
-              ) : accountDetails?.balance !== undefined && accountDetails.balance !== null ? (
-                <Text style={styles.fundsAmount}>
-                  {accountDetails.currency || 'INR'} {parseFloat(accountDetails.balance / 100).toFixed(2)}
-                </Text>
-              ) : (
-                <Text style={styles.fundsAmount}>Loading...</Text>
-              )}
-              <TouchableOpacity
-                onPress={() => fetchAvailableFunds(selectedAccountId)}
-                style={styles.fundsRefreshButton}
-                disabled={fundsLoading}
-              >
-                <MaterialCommunityIcons
-                  name="refresh"
-                  size={16}
-                  color="#10B981"
-                  style={fundsLoading && { transform: [{ rotate: '360deg' }] }}
-                />
-              </TouchableOpacity>
+          <View style={styles.fundsAndButtonRow}>
+            {/* Available Funds Box */}
+            <View style={styles.fundsBox}>
+              <Text style={styles.fundsLabel}>Available Funds:</Text>
+              <View style={styles.fundsContent}>
+                {fundsLoading ? (
+                  <ActivityIndicator size="small" color="#10B981" />
+                ) : availableFunds ? (
+                  <Text style={styles.fundsAmount}>
+                    {availableFunds.currency} {availableFunds.amount.toFixed(2)}
+                  </Text>
+                ) : accountDetails?.balance !== undefined && accountDetails.balance !== null ? (
+                  <Text style={styles.fundsAmount}>
+                    {accountDetails.currency || 'INR'} {parseFloat(accountDetails.balance / 100).toFixed(2)}
+                  </Text>
+                ) : (
+                  <Text style={styles.fundsAmount}>Loading...</Text>
+                )}
+                <TouchableOpacity
+                  onPress={() => fetchAvailableFunds(selectedAccountId)}
+                  style={styles.fundsRefreshButton}
+                  disabled={fundsLoading}
+                >
+                  <MaterialCommunityIcons
+                    name="refresh"
+                    size={16}
+                    color="#10B981"
+                    style={fundsLoading && { transform: [{ rotate: '360deg' }] }}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
+
+            {/* Add Funds Button */}
+            <TouchableOpacity
+              onPress={handleAddFunds}
+              style={styles.addFundsButton}
+            >
+              <Text style={styles.addFundsSymbol}>₹</Text>
+              <Text style={styles.addFundsText}>Add Funds</Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -780,9 +824,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   accountSelectorSection: {
-    flexDirection: "row",
     gap: 12,
     marginBottom: 16,
+  },
+  fundsAndButtonRow: {
+    flexDirection: "row",
+    gap: 12,
+    alignItems: "center",
     flexWrap: "wrap",
   },
   accountSelectorContainer: {
@@ -819,7 +867,7 @@ const styles = StyleSheet.create({
   },
   fundsBox: {
     flex: 1,
-    minWidth: 180,
+    minWidth: 150,
     backgroundColor: "#ECFDF5",
     borderRadius: 8,
     borderWidth: 2,
@@ -830,6 +878,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 2,
     elevation: 2,
+    justifyContent: "center",
+    minHeight: 72,
   },
   fundsLabel: {
     fontSize: 12,
@@ -850,6 +900,35 @@ const styles = StyleSheet.create({
   },
   fundsRefreshButton: {
     padding: 4,
+  },
+  addFundsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#10B981",
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 2,
+    borderColor: "#EF4444",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+    minWidth: 120,
+    height: 72,
+  },
+  addFundsSymbol: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  addFundsText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#fff",
   },
 });
 

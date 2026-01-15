@@ -96,9 +96,13 @@ export default function SubscribePageWebhooks({ campaignData, onComplete, onBack
           </View>
 
           {onComplete && (
-            <TouchableOpacity style={styles.primaryButton} onPress={onComplete}>
-              <MaterialCommunityIcons name="home" size={20} color="#fff" style={{ marginRight: 8 }} />
-              <Text style={styles.primaryButtonText}>Back to Meta Management</Text>
+            <TouchableOpacity 
+              style={styles.goToMetaButton} 
+              onPress={onComplete}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons name="arrow-right-circle" size={24} color="#fff" style={{ marginRight: 10 }} />
+              <Text style={styles.goToMetaButtonText}>Back to Meta Management</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -355,6 +359,28 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 32,
     lineHeight: 24,
+  },
+  goToMetaButton: {
+    width: "100%",
+    backgroundColor: "#1877F2",
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    marginTop: 24,
+    shadowColor: "#1877F2",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  goToMetaButtonText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
 });
 

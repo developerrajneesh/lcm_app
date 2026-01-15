@@ -1,8 +1,8 @@
 // API Configuration
 // Change BACKEND_URL here to update it across the entire app
 
-const BACKEND_URL = "http://192.168.1.4:5000";
-// const BACKEND_URL = "https://api.leadscraftmarketing.com";
+// const BACKEND_URL = "http://192.168.1.2:5000";
+const BACKEND_URL = "https://api.leadscraftmarketing.com";
 const API_BASE_URL = `${BACKEND_URL}/api/v1`;
 const SOCKET_URL = BACKEND_URL;
 

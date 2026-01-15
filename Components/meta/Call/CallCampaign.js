@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   objectiveCode: {
-    fontSize: 12,
+    fontSize: 10,
     color: "#606770",
   },
   buttonRow: {

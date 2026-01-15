@@ -32,6 +32,7 @@ export default function CallAdSet({ campaignData, onNext, onBack }) {
   });
   const [customLocations, setCustomLocations] = useState([]);
   const [selectedPlace, setSelectedPlace] = useState(null);
+  const [expandedLocations, setExpandedLocations] = useState(new Set()); // Track which location cards are expanded
   const [loading, setLoading] = useState(false);
 
   const countries = [
@@ -205,6 +206,11 @@ export default function CallAdSet({ campaignData, onNext, onBack }) {
       Alert.alert("Error", "Please enter daily budget");
       return;
     }
+    const budgetAmount = parseFloat(formData.daily_budget);
+    if (isNaN(budgetAmount) || budgetAmount <= 0) {
+      Alert.alert("Error", "Please enter a valid daily budget amount");
+      return;
+    }
     if (parseInt(formData.min_age) < 13 || parseInt(formData.min_age) > 65) {
       Alert.alert("Error", "Min Age must be between 13 and 65");
       return;
@@ -290,7 +296,7 @@ export default function CallAdSet({ campaignData, onNext, onBack }) {
         fb_token: fbToken,
         name: formData.name,
         campaign_id: campaignData.campaign_id,
-        daily_budget: formData.daily_budget.toString(),
+        daily_budget: (parseFloat(formData.daily_budget) * 100).toString(), // Convert rupees to paise (×100)
         destination_type: "PHONE_CALL",
         optimization_goal: "QUALITY_CALL",
         billing_event: "IMPRESSIONS",
@@ -362,15 +368,18 @@ export default function CallAdSet({ campaignData, onNext, onBack }) {
 
         <View style={styles.inputContainer}>
           <Text style={styles.label}>
-            Daily Budget <Text style={styles.required}>*</Text>
+            Daily Budget (₹) <Text style={styles.required}>*</Text>
           </Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter daily budget"
+            placeholder="Enter amount in rupees (e.g., 500)"
             keyboardType="numeric"
             value={formData.daily_budget}
             onChangeText={(text) => setFormData({ ...formData, daily_budget: text })}
           />
+          <Text style={[styles.hint, { fontSize: 11, marginTop: 4 }]}>
+            Amount will be converted to paise (×100) when submitting
+          </Text>
         </View>
 
         <View style={{ marginTop: 20, borderTopWidth: 1, borderTopColor: "#E4E6EB", paddingTop: 20 }}>
@@ -415,47 +424,98 @@ export default function CallAdSet({ campaignData, onNext, onBack }) {
             <View style={[styles.inputContainer, { backgroundColor: "#E3F2FD", padding: 15, borderRadius: 8, marginBottom: 15 }]}>
               <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                 <Text style={[styles.label, { fontSize: 14 }]}>Custom Locations ({customLocations.length})</Text>
-                <TouchableOpacity onPress={() => { setCustomLocations([]); setSelectedPlace(null); }}>
+                <TouchableOpacity onPress={() => { 
+                  setCustomLocations([]); 
+                  setSelectedPlace(null);
+                  setExpandedLocations(new Set());
+                }}>
                   <Text style={{ color: "#E53935", fontSize: 12, fontWeight: "600" }}>Clear All</Text>
                 </TouchableOpacity>
               </View>
-              {customLocations.map((loc, idx) => (
-                <View key={idx} style={{ backgroundColor: "#fff", padding: 12, borderRadius: 8, marginBottom: 10 }}>
-                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                    <View style={{ flex: 1 }}>
-                      {loc.name && <Text style={[styles.label, { fontSize: 13, marginBottom: 4 }]}>{loc.name}</Text>}
-                      {loc.address && <Text style={[styles.hint, { fontSize: 11, marginBottom: 4 }]}>{loc.address}</Text>}
-                      <Text style={[styles.hint, { fontSize: 10, fontFamily: "monospace" }]}>
-                        Lat: {loc.latitude.toFixed(6)}, Lng: {loc.longitude.toFixed(6)}
-                      </Text>
-                    </View>
-                    <TouchableOpacity onPress={() => setCustomLocations(customLocations.filter((_, i) => i !== idx))}>
-                      <MaterialCommunityIcons name="close" size={18} color="#606770" />
-                    </TouchableOpacity>
-                  </View>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                    <Text style={[styles.hint, { fontSize: 12 }]}>Radius:</Text>
-                    <TextInput
-                      style={[styles.input, { width: 60, paddingVertical: 6, paddingHorizontal: 8, fontSize: 12 }]}
-                      value={loc.radius.toString()}
-                      onChangeText={(text) => {
-                        const newLocations = [...customLocations];
-                        const newRadius = parseInt(text);
-                        if (!isNaN(newRadius)) {
-                          if (newRadius < 2) newLocations[idx].radius = 2;
-                          else if (newRadius > 17) newLocations[idx].radius = 17;
-                          else newLocations[idx].radius = newRadius;
+              {customLocations.map((loc, idx) => {
+                const isExpanded = expandedLocations.has(idx);
+                return (
+                  <View key={idx} style={{ backgroundColor: "#fff", borderRadius: 8, marginBottom: 10, overflow: "hidden", borderWidth: 1, borderColor: "#BBDEFB" }}>
+                    {/* Accordion Header */}
+                    <TouchableOpacity
+                      onPress={() => {
+                        const newExpanded = new Set(expandedLocations);
+                        if (isExpanded) {
+                          newExpanded.delete(idx);
                         } else {
-                          newLocations[idx].radius = 5;
+                          newExpanded.add(idx);
                         }
-                        setCustomLocations(newLocations);
+                        setExpandedLocations(newExpanded);
                       }}
-                      keyboardType="numeric"
-                    />
-                    <Text style={[styles.hint, { fontSize: 12 }]}>km</Text>
+                      style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 12 }}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ flex: 1 }}>
+                        {loc.name && <Text style={[styles.label, { fontSize: 13, marginBottom: 4 }]}>{loc.name}</Text>}
+                        {loc.address && <Text style={[styles.hint, { fontSize: 11 }]} numberOfLines={1}>{loc.address}</Text>}
+                      </View>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <TouchableOpacity
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            setCustomLocations(customLocations.filter((_, i) => i !== idx));
+                            const newExpanded = new Set(expandedLocations);
+                            newExpanded.delete(idx);
+                            // Adjust indices for remaining items
+                            const adjustedExpanded = new Set();
+                            newExpanded.forEach((expandedIdx) => {
+                              if (expandedIdx > idx) {
+                                adjustedExpanded.add(expandedIdx - 1);
+                              } else if (expandedIdx < idx) {
+                                adjustedExpanded.add(expandedIdx);
+                              }
+                            });
+                            setExpandedLocations(adjustedExpanded);
+                          }}
+                        >
+                          <MaterialCommunityIcons name="close" size={18} color="#606770" />
+                        </TouchableOpacity>
+                        <MaterialCommunityIcons 
+                          name={isExpanded ? "chevron-up" : "chevron-down"} 
+                          size={20} 
+                          color="#606770" 
+                        />
+                      </View>
+                    </TouchableOpacity>
+                    {/* Accordion Content */}
+                    {isExpanded && (
+                      <View style={{ paddingHorizontal: 12, paddingBottom: 12, borderTopWidth: 1, borderTopColor: "#E0E0E0" }}>
+                        <View style={{ marginTop: 8, marginBottom: 8 }}>
+                          <Text style={[styles.hint, { fontSize: 10, fontFamily: "monospace" }]}>
+                            Lat: {loc.latitude.toFixed(6)}, Lng: {loc.longitude.toFixed(6)}
+                          </Text>
+                        </View>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                          <Text style={[styles.hint, { fontSize: 12 }]}>Radius:</Text>
+                          <TextInput
+                            style={[styles.input, { width: 60, paddingVertical: 6, paddingHorizontal: 8, fontSize: 12 }]}
+                            value={loc.radius.toString()}
+                            onChangeText={(text) => {
+                              const newLocations = [...customLocations];
+                              const newRadius = parseInt(text);
+                              if (!isNaN(newRadius)) {
+                                if (newRadius < 2) newLocations[idx].radius = 2;
+                                else if (newRadius > 17) newLocations[idx].radius = 17;
+                                else newLocations[idx].radius = newRadius;
+                              } else {
+                                newLocations[idx].radius = 5;
+                              }
+                              setCustomLocations(newLocations);
+                            }}
+                            keyboardType="numeric"
+                          />
+                          <Text style={[styles.hint, { fontSize: 12 }]}>km</Text>
+                        </View>
+                      </View>
+                    )}
                   </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
