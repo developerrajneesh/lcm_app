@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -8,12 +8,15 @@ import {
   ActivityIndicator,
   Alert,
   ScrollView,
+  FlatList,
+  Modal,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { API_BASE_URL } from "../../../config/api";
 import PlacesAutocomplete from "../../PlacesAutocomplete";
+import { searchWorkPosition, searchInterest, searchEmployer } from "../../../utils/metaTargetingSearch";
 
 export default function LinkAdSet({ campaignData, onNext, onBack }) {
   const [formData, setFormData] = useState({
@@ -34,6 +37,23 @@ export default function LinkAdSet({ campaignData, onNext, onBack }) {
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [expandedLocations, setExpandedLocations] = useState(new Set()); // Track which location cards are expanded
   const [loading, setLoading] = useState(false);
+
+  // Detailed Targeting States
+  const [workPositionQuery, setWorkPositionQuery] = useState("");
+  const [interestQuery, setInterestQuery] = useState("");
+  const [employerQuery, setEmployerQuery] = useState("");
+  const [workPositionResults, setWorkPositionResults] = useState([]);
+  const [interestResults, setInterestResults] = useState([]);
+  const [employerResults, setEmployerResults] = useState([]);
+  const [selectedInterests, setSelectedInterests] = useState([]);
+  const [selectedWorkPositions, setSelectedWorkPositions] = useState([]);
+  const [selectedEmployers, setSelectedEmployers] = useState([]);
+  const [loadingWorkPosition, setLoadingWorkPosition] = useState(false);
+  const [loadingInterest, setLoadingInterest] = useState(false);
+  const [loadingEmployer, setLoadingEmployer] = useState(false);
+  const [showWorkPositionModal, setShowWorkPositionModal] = useState(false);
+  const [showInterestModal, setShowInterestModal] = useState(false);
+  const [showEmployerModal, setShowEmployerModal] = useState(false);
 
   const countries = [
     { code: "US", name: "United States", flag: "🇺🇸" },
@@ -197,6 +217,176 @@ export default function LinkAdSet({ campaignData, onNext, onBack }) {
     }
   };
 
+  // Detailed Targeting Functions
+  const searchWorkPositions = async (query) => {
+    if (!query || query.trim().length < 2) {
+      setWorkPositionResults([]);
+      return;
+    }
+    try {
+      setLoadingWorkPosition(true);
+      const fbToken = await AsyncStorage.getItem("fb_access_token") || await AsyncStorage.getItem("fb_token");
+      if (!fbToken) {
+        Alert.alert("Error", "Please connect your Meta account first");
+        return;
+      }
+      const response = await searchWorkPosition(fbToken, query.trim());
+      if (response.success) {
+        setWorkPositionResults(response.data || []);
+      } else {
+        setWorkPositionResults([]);
+        if (response.error) {
+          console.error("Work position search error:", response.error);
+        }
+      }
+    } catch (error) {
+      console.error("Error searching work positions:", error);
+      setWorkPositionResults([]);
+    } finally {
+      setLoadingWorkPosition(false);
+    }
+  };
+
+  const searchInterests = async (query) => {
+    if (!query || query.trim().length < 2) {
+      setInterestResults([]);
+      return;
+    }
+    try {
+      setLoadingInterest(true);
+      const fbToken = await AsyncStorage.getItem("fb_access_token") || await AsyncStorage.getItem("fb_token");
+      if (!fbToken) {
+        Alert.alert("Error", "Please connect your Meta account first");
+        return;
+      }
+      const response = await searchInterest(fbToken, query.trim());
+      if (response.success) {
+        setInterestResults(response.data || []);
+      } else {
+        setInterestResults([]);
+        if (response.error) {
+          console.error("Interest search error:", response.error);
+        }
+      }
+    } catch (error) {
+      console.error("Error searching interests:", error);
+      setInterestResults([]);
+    } finally {
+      setLoadingInterest(false);
+    }
+  };
+
+  const searchEmployers = async (query) => {
+    if (!query || query.trim().length < 2) {
+      setEmployerResults([]);
+      return;
+    }
+    try {
+      setLoadingEmployer(true);
+      const fbToken = await AsyncStorage.getItem("fb_access_token") || await AsyncStorage.getItem("fb_token");
+      if (!fbToken) {
+        Alert.alert("Error", "Please connect your Meta account first");
+        return;
+      }
+      const response = await searchEmployer(fbToken, query.trim());
+      if (response.success) {
+        setEmployerResults(response.data || []);
+      } else {
+        setEmployerResults([]);
+        if (response.error) {
+          console.error("Employer search error:", response.error);
+        }
+      }
+    } catch (error) {
+      console.error("Error searching employers:", error);
+      setEmployerResults([]);
+    } finally {
+      setLoadingEmployer(false);
+    }
+  };
+
+  // Debounced search effects
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (workPositionQuery && workPositionQuery.trim().length >= 2) {
+        searchWorkPositions(workPositionQuery);
+      } else {
+        setWorkPositionResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [workPositionQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (interestQuery && interestQuery.trim().length >= 2) {
+        searchInterests(interestQuery);
+      } else {
+        setInterestResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [interestQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (employerQuery && employerQuery.trim().length >= 2) {
+        searchEmployers(employerQuery);
+      } else {
+        setEmployerResults([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [employerQuery]);
+
+  const handleSelectWorkPosition = (item) => {
+    if (!selectedWorkPositions.find(pos => pos.id === item.id)) {
+      setSelectedWorkPositions([...selectedWorkPositions, item]);
+    }
+    setWorkPositionQuery("");
+    setWorkPositionResults([]);
+    setShowWorkPositionModal(false);
+  };
+
+  const handleSelectInterest = (item) => {
+    if (!selectedInterests.find(int => int.id === item.id)) {
+      setSelectedInterests([...selectedInterests, item]);
+    }
+    setInterestQuery("");
+    setInterestResults([]);
+    setShowInterestModal(false);
+  };
+
+  const handleSelectEmployer = (item) => {
+    if (!selectedEmployers.find(emp => emp.id === item.id)) {
+      setSelectedEmployers([...selectedEmployers, item]);
+    }
+    setEmployerQuery("");
+    setEmployerResults([]);
+    setShowEmployerModal(false);
+  };
+
+  const removeWorkPosition = (id) => {
+    setSelectedWorkPositions(selectedWorkPositions.filter(pos => pos.id !== id));
+  };
+
+  const removeInterest = (id) => {
+    setSelectedInterests(selectedInterests.filter(int => int.id !== id));
+  };
+
+  const removeEmployer = (id) => {
+    setSelectedEmployers(selectedEmployers.filter(emp => emp.id !== id));
+  };
+
+  const formatCoverage = (num) => {
+    if (num >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    } else if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
+  };
+
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
       Alert.alert("Error", "Please enter ad set name");
@@ -291,6 +481,17 @@ export default function LinkAdSet({ campaignData, onNext, onBack }) {
         targeting.instagram_positions = formData.targeting.instagram_positions;
       }
 
+      // Add detailed targeting if selected
+      if (selectedInterests.length > 0) {
+        targeting.interests = selectedInterests.map(int => int.id);
+      }
+      if (selectedWorkPositions.length > 0) {
+        targeting.work_positions = selectedWorkPositions.map(pos => pos.id);
+      }
+      if (selectedEmployers.length > 0) {
+        targeting.work_employers = selectedEmployers.map(emp => emp.id);
+      }
+
       const adsetPayload = {
         act_ad_account_id: actAdAccountId,
         fb_token: fbToken,
@@ -300,7 +501,7 @@ export default function LinkAdSet({ campaignData, onNext, onBack }) {
         destination_type: "WEBSITE",
         optimization_goal: "REACH",
         billing_event: "IMPRESSIONS",
-        status: "PAUSED",
+        status: "ACTIVE",
         targeting,
       };
 
@@ -738,7 +939,315 @@ export default function LinkAdSet({ campaignData, onNext, onBack }) {
             </View>
             <Text style={styles.hint}>Leave empty to target all devices</Text>
           </View>
+
+          {/* Detailed Targeting Section */}
+          <View style={[styles.inputContainer, { marginTop: 20, borderTopWidth: 1, borderTopColor: "#E4E6EB", paddingTop: 20 }]}>
+            <Text style={[styles.label, { fontSize: 18, marginBottom: 15 }]}>
+              <MaterialCommunityIcons name="magnify" size={20} color="#EC4899" /> Detailed Targeting (Optional)
+            </Text>
+            <Text style={[styles.hint, { marginBottom: 15 }]}>
+              Add interests, work positions, or employers to refine your audience targeting.
+            </Text>
+
+            {/* Interests */}
+            <View style={{ marginBottom: 15 }}>
+              <Text style={styles.label}>
+                <MaterialCommunityIcons name="heart" size={16} color="#EC4899" /> Interests
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowInterestModal(true)}
+                style={[styles.input, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}
+              >
+                <Text style={{ color: interestQuery ? "#000" : "#999" }}>
+                  {interestQuery || "Search interests (e.g., gaming, sports)"}
+                </Text>
+                <MaterialCommunityIcons name="magnify" size={20} color="#EC4899" />
+              </TouchableOpacity>
+              {selectedInterests.length > 0 && (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                  {selectedInterests.map((item) => (
+                    <View
+                      key={item.id}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        backgroundColor: "#FCE7F3",
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 20,
+                        gap: 6,
+                      }}
+                    >
+                      <Text style={{ color: "#BE185D", fontSize: 12 }}>{item.name}</Text>
+                      <TouchableOpacity onPress={() => removeInterest(item.id)}>
+                        <MaterialCommunityIcons name="close-circle" size={16} color="#BE185D" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Work Positions */}
+            <View style={{ marginBottom: 15 }}>
+              <Text style={styles.label}>
+                <MaterialCommunityIcons name="briefcase" size={16} color="#3B82F6" /> Work Positions
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowWorkPositionModal(true)}
+                style={[styles.input, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}
+              >
+                <Text style={{ color: workPositionQuery ? "#000" : "#999" }}>
+                  {workPositionQuery || "Search work positions (e.g., doctor, engineer)"}
+                </Text>
+                <MaterialCommunityIcons name="magnify" size={20} color="#EC4899" />
+              </TouchableOpacity>
+              {selectedWorkPositions.length > 0 && (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                  {selectedWorkPositions.map((item) => (
+                    <View
+                      key={item.id}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        backgroundColor: "#DBEAFE",
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 20,
+                        gap: 6,
+                      }}
+                    >
+                      <Text style={{ color: "#1E40AF", fontSize: 12 }}>{item.name}</Text>
+                      <TouchableOpacity onPress={() => removeWorkPosition(item.id)}>
+                        <MaterialCommunityIcons name="close-circle" size={16} color="#1E40AF" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Employers */}
+            <View style={{ marginBottom: 15 }}>
+              <Text style={styles.label}>
+                <MaterialCommunityIcons name="office-building" size={16} color="#F97316" /> Employers (Companies)
+              </Text>
+              <TouchableOpacity
+                onPress={() => setShowEmployerModal(true)}
+                style={[styles.input, { flexDirection: "row", alignItems: "center", justifyContent: "space-between" }]}
+              >
+                <Text style={{ color: employerQuery ? "#000" : "#999" }}>
+                  {employerQuery || "Search employers/companies (e.g., hospital, tech company)"}
+                </Text>
+                <MaterialCommunityIcons name="magnify" size={20} color="#EC4899" />
+              </TouchableOpacity>
+              {selectedEmployers.length > 0 && (
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                  {selectedEmployers.map((item) => (
+                    <View
+                      key={item.id}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        backgroundColor: "#FFEDD5",
+                        paddingHorizontal: 12,
+                        paddingVertical: 6,
+                        borderRadius: 20,
+                        gap: 6,
+                      }}
+                    >
+                      <Text style={{ color: "#9A3412", fontSize: 12 }}>{item.name}</Text>
+                      <TouchableOpacity onPress={() => removeEmployer(item.id)}>
+                        <MaterialCommunityIcons name="close-circle" size={16} color="#9A3412" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
         </View>
+
+        {/* Search Modals - Same as CallAdSet but with pink theme */}
+        <Modal
+          visible={showInterestModal}
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => {
+            setShowInterestModal(false);
+            setInterestQuery("");
+            setInterestResults([]);
+          }}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Search Interests</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowInterestModal(false);
+                  setInterestQuery("");
+                  setInterestResults([]);
+                }}
+              >
+                <MaterialCommunityIcons name="close" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Search interests (e.g., gaming, sports)"
+              value={interestQuery}
+              onChangeText={setInterestQuery}
+              autoFocus
+            />
+            {loadingInterest && (
+              <View style={{ padding: 20, alignItems: "center" }}>
+                <ActivityIndicator size="small" color="#EC4899" />
+              </View>
+            )}
+            <FlatList
+              data={interestResults}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.modalItem}
+                  onPress={() => handleSelectInterest(item)}
+                >
+                  <Text style={styles.modalItemName}>{item.name}</Text>
+                  {item.audience_size && (
+                    <Text style={styles.modalItemMeta}>
+                      Audience: {formatCoverage(item.audience_size)}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                interestQuery.length >= 2 && !loadingInterest ? (
+                  <Text style={styles.modalEmptyText}>No results found</Text>
+                ) : null
+              }
+            />
+          </View>
+        </Modal>
+
+        <Modal
+          visible={showWorkPositionModal}
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => {
+            setShowWorkPositionModal(false);
+            setWorkPositionQuery("");
+            setWorkPositionResults([]);
+          }}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Search Work Positions</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowWorkPositionModal(false);
+                  setWorkPositionQuery("");
+                  setWorkPositionResults([]);
+                }}
+              >
+                <MaterialCommunityIcons name="close" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Search work positions (e.g., doctor, engineer)"
+              value={workPositionQuery}
+              onChangeText={setWorkPositionQuery}
+              autoFocus
+            />
+            {loadingWorkPosition && (
+              <View style={{ padding: 20, alignItems: "center" }}>
+                <ActivityIndicator size="small" color="#EC4899" />
+              </View>
+            )}
+            <FlatList
+              data={workPositionResults}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.modalItem}
+                  onPress={() => handleSelectWorkPosition(item)}
+                >
+                  <Text style={styles.modalItemName}>{item.name}</Text>
+                  {item.coverage_lower_bound && item.coverage_upper_bound && (
+                    <Text style={styles.modalItemMeta}>
+                      Coverage: {formatCoverage(item.coverage_lower_bound)} - {formatCoverage(item.coverage_upper_bound)}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                workPositionQuery.length >= 2 && !loadingWorkPosition ? (
+                  <Text style={styles.modalEmptyText}>No results found</Text>
+                ) : null
+              }
+            />
+          </View>
+        </Modal>
+
+        <Modal
+          visible={showEmployerModal}
+          animationType="slide"
+          transparent={false}
+          onRequestClose={() => {
+            setShowEmployerModal(false);
+            setEmployerQuery("");
+            setEmployerResults([]);
+          }}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Search Employers</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setShowEmployerModal(false);
+                  setEmployerQuery("");
+                  setEmployerResults([]);
+                }}
+              >
+                <MaterialCommunityIcons name="close" size={24} color="#000" />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Search employers/companies (e.g., hospital, tech company)"
+              value={employerQuery}
+              onChangeText={setEmployerQuery}
+              autoFocus
+            />
+            {loadingEmployer && (
+              <View style={{ padding: 20, alignItems: "center" }}>
+                <ActivityIndicator size="small" color="#EC4899" />
+              </View>
+            )}
+            <FlatList
+              data={employerResults}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.modalItem}
+                  onPress={() => handleSelectEmployer(item)}
+                >
+                  <Text style={styles.modalItemName}>{item.name}</Text>
+                  {item.coverage_lower_bound && item.coverage_upper_bound && (
+                    <Text style={styles.modalItemMeta}>
+                      Coverage: {formatCoverage(item.coverage_lower_bound)} - {formatCoverage(item.coverage_upper_bound)}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              ListEmptyComponent={
+                employerQuery.length >= 2 && !loadingEmployer ? (
+                  <Text style={styles.modalEmptyText}>No results found</Text>
+                ) : null
+              }
+            />
+          </View>
+        </Modal>
 
         <View style={styles.buttonRow}>
           {onBack && (
@@ -901,6 +1410,55 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     opacity: 0.5,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+    paddingTop: 50,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E4E6EB",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#1C1E21",
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: "#D8DEE6",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: "#fff",
+    margin: 20,
+    marginBottom: 10,
+  },
+  modalItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E4E6EB",
+  },
+  modalItemName: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#1C1E21",
+    marginBottom: 4,
+  },
+  modalItemMeta: {
+    fontSize: 12,
+    color: "#606770",
+  },
+  modalEmptyText: {
+    textAlign: "center",
+    padding: 20,
+    color: "#606770",
+    fontSize: 14,
   },
 });
 

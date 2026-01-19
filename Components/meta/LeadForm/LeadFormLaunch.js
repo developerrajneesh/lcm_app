@@ -47,7 +47,7 @@ export default function LeadFormLaunch({ campaignData, onComplete, onBack }) {
         adset_id: campaignData.adset_id,
         creative_id: campaignData.creative_id,
         leadgen_form_id: campaignData.leadgen_form_id,
-        status: "PAUSED",
+        status: "ACTIVE",
       };
 
       const response = await axios.post(
@@ -172,7 +172,7 @@ export default function LeadFormLaunch({ campaignData, onComplete, onBack }) {
         <View style={styles.infoBox}>
           <MaterialCommunityIcons name="information" size={20} color="#1877F2" />
           <Text style={styles.infoText}>
-            Your ad will be created in PAUSED status. You can activate it later from your Meta Ads Manager.
+            Your ad will be created in ACTIVE status and will start running immediately.
           </Text>
         </View>
 

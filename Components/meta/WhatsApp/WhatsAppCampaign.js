@@ -41,7 +41,7 @@ export default function WhatsAppCampaign({ onNext, onBack }) {
         name: campaignName,
         objective: "OUTCOME_ENGAGEMENT",
         special_ad_categories: ["NONE"],
-        status: "PAUSED",
+        status: "ACTIVE",
       };
 
       const response = await axios.post(

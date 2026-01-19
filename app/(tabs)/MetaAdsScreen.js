@@ -2987,7 +2987,7 @@ const MetaAdsScreen = () => {
         name: campaignName,
         objective: objective,
         special_ad_categories: ["NONE"],
-        status: "PAUSED",
+        status: "ACTIVE",
       };
 
       // Determine API endpoint based on campaign type
@@ -3246,7 +3246,7 @@ const MetaAdsScreen = () => {
           destination_type: "WHATSAPP",
           optimization_goal: "CONVERSATIONS",
           billing_event: "IMPRESSIONS",
-          status: "PAUSED",
+          status: "ACTIVE",
           targeting: targetingData,
         };
         adsetEndpoint = `${API_BASE_URL}/click-to-whatsapp/adsets`;
@@ -3259,7 +3259,7 @@ const MetaAdsScreen = () => {
           destination_type: "PHONE_CALL",
           optimization_goal: "QUALITY_CALL",
           billing_event: "IMPRESSIONS",
-          status: "PAUSED",
+          status: "ACTIVE",
           targeting: targetingData,
         };
         adsetEndpoint = `${API_BASE_URL}/click-to-call/adsets`;
@@ -3272,7 +3272,7 @@ const MetaAdsScreen = () => {
           destination_type: "WEBSITE",
           optimization_goal: "LINK_CLICKS",
           billing_event: "IMPRESSIONS",
-          status: "PAUSED",
+          status: "ACTIVE",
           targeting: targetingData,
         };
         adsetEndpoint = `${API_BASE_URL}/click-to-link/adsets`;
@@ -3490,7 +3490,7 @@ const MetaAdsScreen = () => {
       const adPayload = {
         adset_id: createdAdSetId,
         creative_id: createdCreativeId,
-        status: "PAUSED",
+        status: "ACTIVE",
       };
 
       // Determine API endpoint based on campaign type

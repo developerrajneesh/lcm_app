@@ -49,7 +49,7 @@ export default function CallCampaign({ onNext, onBack }) {
         name: campaignName,
         objective: objective,
         special_ad_categories: ["NONE"],
-        status: "PAUSED",
+        status: "ACTIVE",
       };
 
       const response = await axios.post(

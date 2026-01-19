@@ -39,7 +39,7 @@ export default function LinkLaunch({ campaignData, onComplete, onBack }) {
         fb_token: fbToken,
         adset_id: campaignData.adset_id,
         creative_id: campaignData.creative_id,
-        status: "PAUSED",
+        status: "ACTIVE",
       };
 
       const response = await axios.post(
@@ -127,8 +127,8 @@ export default function LinkLaunch({ campaignData, onComplete, onBack }) {
 
       <View style={styles.infoBox}>
         <Text style={styles.infoText}>
-          Your ad is ready to be created. Once launched, it will be in <Text style={styles.bold}>PAUSED</Text> status.
-          You can activate it later from your Meta Ads Manager.
+          Your ad is ready to be created. Once launched, it will be in <Text style={styles.bold}>ACTIVE</Text> status.
+          It will start running immediately.
         </Text>
       </View>
 

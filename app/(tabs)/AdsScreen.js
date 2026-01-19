@@ -166,6 +166,56 @@ export default function AdsScreen() {
     }
   };
 
+  const handleDelete = async (adId, adName) => {
+    Alert.alert(
+      "Delete Ad",
+      `Are you sure you want to delete "${adName || adId}"? This action cannot be undone.`,
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const accessToken = await AsyncStorage.getItem("fb_access_token");
+              if (!accessToken) {
+                Alert.alert("Error", "Please connect your Meta account first");
+                return;
+              }
+
+              const response = await axios.delete(
+                `${API_BASE_URL}/ads/${adId}`,
+                {
+                  headers: {
+                    "x-fb-access-token": accessToken,
+                  },
+                }
+              );
+
+              if (response.data.success) {
+                Alert.alert("Success", "Ad deleted successfully");
+                fetchAds();
+              } else {
+                throw new Error(response.data.message || "Failed to delete ad");
+              }
+            } catch (error) {
+              console.error("Error deleting ad:", error);
+              Alert.alert(
+                "Error",
+                error.response?.data?.fb?.message ||
+                  error.response?.data?.message ||
+                  "Failed to delete ad"
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
+
 
   const filteredAds = ads.filter((ad) => {
     const matchesSearch = (ad.name || "")
@@ -379,6 +429,16 @@ export default function AdsScreen() {
                 />
               </TouchableOpacity>
             )}
+            <TouchableOpacity
+              style={[styles.actionIconButton, { marginLeft: 8 }]}
+              onPress={() => handleDelete(item.id, item.name)}
+            >
+              <MaterialCommunityIcons
+                name="delete"
+                size={20}
+                color="#EF4444"
+              />
+            </TouchableOpacity>
           </View>
         </View>
       </View>
