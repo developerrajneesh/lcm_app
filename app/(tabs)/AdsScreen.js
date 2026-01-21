@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   FlatList,
   RefreshControl,
   SafeAreaView,
@@ -261,7 +262,28 @@ export default function AdsScreen() {
     return `${parseFloat(value).toFixed(2)}%`;
   };
 
+  // Helper function to safely get insight value, returns 0 if not exists
+  const getInsightValue = (insights, key) => {
+    if (!insights) return "0";
+    const value = insights[key];
+    if (value === null || value === undefined || value === "") return "0";
+    return value;
+  };
+
+  // Helper to get action value
+  const getActionValue = (insights, actionType) => {
+    if (!insights || !insights.actions || !Array.isArray(insights.actions)) return "0";
+    const action = insights.actions.find(a => a.action_type === actionType);
+    return action ? action.value : "0";
+  };
+
   const renderAdItem = ({ item, index }) => {
+    const screenWidth = Dimensions.get("window").width;
+    const cardPadding = 40; // 20px padding on each side of the card
+    const gap = 10; // gap between items
+    const availableWidth = screenWidth - cardPadding;
+    const itemWidth = (availableWidth - gap) / 2;
+    
     const status = item.status || "";
     const statusColor = getStatusColor(status);
     const statusText = getStatusText(status);
@@ -356,59 +378,97 @@ export default function AdsScreen() {
           {/* Analytics Section */}
           <View style={styles.analyticsSection}>
             <Text style={styles.analyticsTitle}>Analytics (Last 30 Days)</Text>
-            {insights ? (
-              <View style={styles.analyticsGrid}>
-                <View style={styles.analyticsItem}>
-                  <Text style={styles.analyticsLabel}>Impressions</Text>
-                  <Text style={styles.analyticsValue}>
-                    {formatNumber(insights.impressions)}
-                  </Text>
-                </View>
-                <View style={styles.analyticsItem}>
-                  <Text style={styles.analyticsLabel}>Clicks</Text>
-                  <Text style={styles.analyticsValue}>
-                    {formatNumber(insights.clicks)}
-                  </Text>
-                </View>
-                <View style={styles.analyticsItem}>
-                  <Text style={styles.analyticsLabel}>CTR</Text>
-                  <Text style={styles.analyticsValue}>
-                    {insights.ctr ? formatPercent(insights.ctr) : "0%"}
-                  </Text>
-                </View>
-                <View style={styles.analyticsItem}>
-                  <Text style={styles.analyticsLabel}>Spend</Text>
-                  <Text style={styles.analyticsValue}>
-                    {formatCurrency(insights.spend)}
-                  </Text>
-                </View>
+            <View style={styles.analyticsGrid}>
+              {/* Row 1 */}
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>Impressions</Text>
+                <Text style={styles.analyticsValue}>
+                  {formatNumber(getInsightValue(insights, "impressions"))}
+                </Text>
               </View>
-            ) : (
-              <View style={styles.analyticsGrid}>
-                <View style={styles.analyticsItem}>
-                  <Text style={styles.analyticsLabel}>Impressions</Text>
-                  <Text style={styles.analyticsValue}>0</Text>
-                </View>
-                <View style={styles.analyticsItem}>
-                  <Text style={styles.analyticsLabel}>Clicks</Text>
-                  <Text style={styles.analyticsValue}>0</Text>
-                </View>
-                <View style={styles.analyticsItem}>
-                  <Text style={styles.analyticsLabel}>CTR</Text>
-                  <Text style={styles.analyticsValue}>0%</Text>
-                </View>
-                <View style={styles.analyticsItem}>
-                  <Text style={styles.analyticsLabel}>Spend</Text>
-                  <Text style={styles.analyticsValue}>₹0.00</Text>
-                </View>
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>Clicks</Text>
+                <Text style={styles.analyticsValue}>
+                  {formatNumber(getInsightValue(insights, "clicks"))}
+                </Text>
               </View>
-            )}
+              
+              {/* Row 2 */}
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>CTR</Text>
+                <Text style={styles.analyticsValue}>
+                  {formatPercent(getInsightValue(insights, "ctr"))}
+                </Text>
+              </View>
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>Spend</Text>
+                <Text style={styles.analyticsValue}>
+                  {formatCurrency(getInsightValue(insights, "spend"))}
+                </Text>
+              </View>
+              
+              {/* Row 3 */}
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>Reach</Text>
+                <Text style={styles.analyticsValue}>
+                  {formatNumber(getInsightValue(insights, "reach"))}
+                </Text>
+              </View>
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>Frequency</Text>
+                <Text style={styles.analyticsValue}>
+                  {parseFloat(getInsightValue(insights, "frequency")).toFixed(2)}
+                </Text>
+              </View>
+              
+              {/* Row 4 */}
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>CPC</Text>
+                <Text style={styles.analyticsValue}>
+                  {formatCurrency(getInsightValue(insights, "cpc"))}
+                </Text>
+              </View>
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>CPM</Text>
+                <Text style={styles.analyticsValue}>
+                  {formatCurrency(getInsightValue(insights, "cpm"))}
+                </Text>
+              </View>
+              
+              {/* Row 5 - Actions */}
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>Leads</Text>
+                <Text style={styles.analyticsValue}>
+                  {formatNumber(getActionValue(insights, "lead"))}
+                </Text>
+              </View>
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>Link Clicks</Text>
+                <Text style={styles.analyticsValue}>
+                  {formatNumber(getActionValue(insights, "link_click"))}
+                </Text>
+              </View>
+              
+              {/* Row 6 - More Actions */}
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>Video Views</Text>
+                <Text style={styles.analyticsValue}>
+                  {formatNumber(getActionValue(insights, "video_view"))}
+                </Text>
+              </View>
+              <View style={styles.analyticsItem}>
+                <Text style={styles.analyticsLabel}>Page Engagement</Text>
+                <Text style={styles.analyticsValue}>
+                  {formatNumber(getActionValue(insights, "page_engagement"))}
+                </Text>
+              </View>
+            </View>
           </View>
 
           <View style={styles.adActions}>
             {isPaused ? (
               <TouchableOpacity
-                style={styles.actionIconButton}
+                style={[styles.actionIconButton, styles.actionIconButtonSpacing]}
                 onPress={() => handlePauseResume(item.id, status)}
               >
                 <MaterialCommunityIcons
@@ -419,7 +479,7 @@ export default function AdsScreen() {
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
-                style={styles.actionIconButton}
+                style={[styles.actionIconButton, styles.actionIconButtonSpacing]}
                 onPress={() => handlePauseResume(item.id, status)}
               >
                 <MaterialCommunityIcons
@@ -430,7 +490,7 @@ export default function AdsScreen() {
               </TouchableOpacity>
             )}
             <TouchableOpacity
-              style={[styles.actionIconButton, { marginLeft: 8 }]}
+              style={styles.actionIconButton}
               onPress={() => handleDelete(item.id, item.name)}
             >
               <MaterialCommunityIcons
@@ -833,8 +893,10 @@ const styles = StyleSheet.create({
   analyticsSection: {
     marginTop: 16,
     paddingTop: 16,
+    paddingBottom: 16,
     borderTopWidth: 1,
     borderTopColor: "rgba(255, 255, 255, 0.2)",
+    maxHeight: 400,
   },
   analyticsTitle: {
     fontSize: 14,
@@ -846,38 +908,41 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: 12,
+    width: "100%",
   },
   analyticsItem: {
-    width: "48%",
     backgroundColor: "#D1F2E5",
     borderRadius: 8,
-    padding: 8,
+    padding: 10,
+    marginBottom: 10,
+    flexBasis: "48%",
+    maxWidth: "48%",
   },
   analyticsLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#374151",
     marginBottom: 4,
     opacity: 0.9,
   },
   analyticsValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "bold",
     color: "#111827",
   },
   adActions: {
     flexDirection: "row",
     justifyContent: "flex-start",
-    marginTop: 16,
-    paddingTop: 16,
+    alignItems: "center",
+    marginTop: 32,
+    paddingTop: 24,
     borderTopWidth: 1,
     borderTopColor: "rgba(255, 255, 255, 0.2)",
   },
   actionIconButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
@@ -885,9 +950,12 @@ const styles = StyleSheet.create({
       width: 0,
       height: 2,
     },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  actionIconButtonSpacing: {
+    marginRight: 12,
   },
   emptyState: {
     alignItems: "center",

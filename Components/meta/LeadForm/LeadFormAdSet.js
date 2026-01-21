@@ -10,6 +10,7 @@ import {
   ScrollView,
   FlatList,
   Modal,
+  Linking,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -649,12 +650,25 @@ export default function LeadFormAdSet({ campaignData, onNext, onBack }) {
                 buttonTextStyle={{ fontSize: 16, color: !formData.page_id ? "#8B9DC3" : "#1C1E21", textAlign: "left" }}
               />
             ) : (
-              <TextInput
-                style={styles.input}
-                placeholder="Enter Facebook Page ID"
-                value={formData.page_id}
-                onChangeText={(text) => setFormData({ ...formData, page_id: text })}
-              />
+              <View style={styles.noPagesContainer}>
+                <Text style={styles.noPagesText}>No Facebook pages found</Text>
+                <TouchableOpacity
+                  style={styles.createPageButton}
+                  onPress={() => {
+                    Linking.openURL("https://www.facebook.com/pages/create");
+                  }}
+                >
+                  <MaterialCommunityIcons name="plus-circle" size={20} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.createPageButtonText}>Create Facebook Page</Text>
+                </TouchableOpacity>
+                <Text style={styles.orText}>OR</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter Facebook Page ID manually"
+                  value={formData.page_id}
+                  onChangeText={(text) => setFormData({ ...formData, page_id: text })}
+                />
+              </View>
             )}
           </View>
           <View style={[styles.inputContainer, { flex: 1 }]}>
@@ -1589,6 +1603,38 @@ const styles = StyleSheet.create({
     padding: 20,
     color: "#606770",
     fontSize: 14,
+  },
+  noPagesContainer: {
+    alignItems: "center",
+    paddingVertical: 16,
+  },
+  noPagesText: {
+    fontSize: 14,
+    color: "#606770",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  createPageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1877F2",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginBottom: 16,
+    width: "100%",
+  },
+  createPageButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  orText: {
+    fontSize: 12,
+    color: "#8B9DC3",
+    marginBottom: 12,
+    textTransform: "uppercase",
   },
 });
 

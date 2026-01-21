@@ -9,6 +9,7 @@ import {
   Alert,
   ScrollView,
   Image,
+  Linking,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -24,6 +25,9 @@ export default function WhatsAppAdCreative({ campaignData, onNext, onBack }) {
     page_id: campaignData?.page_id || "",
     picture_url: "",
     business_page_url: "",
+    primary_text: "",
+    headline: "",
+    description: "",
   });
   const [pages, setPages] = useState([]);
   const [loadingPages, setLoadingPages] = useState(false);
@@ -31,6 +35,14 @@ export default function WhatsAppAdCreative({ campaignData, onNext, onBack }) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [mediaType, setMediaType] = useState("image"); // "image" or "video"
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [selectedVideo, setSelectedVideo] = useState(null);
+  const [videoPreview, setVideoPreview] = useState(null);
+  const [videoId, setVideoId] = useState(null);
+  const [videoThumbnail, setVideoThumbnail] = useState(null);
+  const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+  const [thumbnailImageHash, setThumbnailImageHash] = useState(null);
 
   useEffect(() => {
     fetchPages();
@@ -48,8 +60,7 @@ export default function WhatsAppAdCreative({ campaignData, onNext, onBack }) {
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [16, 9],
+        allowsEditing: false,
         quality: 0.8,
       });
 
@@ -108,6 +119,166 @@ export default function WhatsAppAdCreative({ campaignData, onNext, onBack }) {
     }));
   };
 
+  const handleVideoSelect = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "We need camera roll permissions to upload videos");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+        allowsEditing: false,
+        quality: 1,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        setSelectedVideo(asset);
+        setVideoPreview(asset.uri);
+        setVideoId(null);
+        setUploadingVideo(true);
+
+        try {
+          const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          const base64String = `data:video/mp4;base64,${base64}`;
+
+          const adAccountId = await AsyncStorage.getItem("fb_ad_account_id") || await AsyncStorage.getItem("act_ad_account_id");
+          const accessToken = await AsyncStorage.getItem("fb_access_token");
+
+          if (!adAccountId || !accessToken) {
+            throw new Error("Missing ad account ID or access token");
+          }
+
+          const uploadResponse = await axios.post(
+            `${API_BASE_URL}/ads/upload-video`,
+            {
+              adAccountId,
+              videoBase64: base64String,
+              pageId: formData.page_id || campaignData?.page_id,
+            },
+            {
+              headers: {
+                "x-fb-access-token": accessToken,
+              },
+            }
+          );
+
+          if (uploadResponse.data.success && uploadResponse.data.videoId) {
+            setVideoId(uploadResponse.data.videoId);
+            console.log("✅ Video uploaded successfully. Video ID:", uploadResponse.data.videoId);
+          } else {
+            throw new Error(uploadResponse.data.error || "Upload failed");
+          }
+        } catch (error) {
+          console.error("Error uploading video:", error);
+          Alert.alert("Error", `Failed to upload video: ${error.response?.data?.error || error.message}`);
+          setVideoId(null);
+          setSelectedVideo(null);
+          setVideoPreview(null);
+        } finally {
+          setUploadingVideo(false);
+        }
+      }
+    } catch (error) {
+      console.error("Error selecting video:", error);
+      Alert.alert("Error", "Failed to select video");
+      setUploadingVideo(false);
+    }
+  };
+
+  const handleRemoveVideo = () => {
+    setSelectedVideo(null);
+    setVideoPreview(null);
+    setVideoId(null);
+    handleRemoveThumbnail();
+  };
+
+  const handleThumbnailSelect = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Permission needed", "We need camera roll permissions to upload thumbnail");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets[0]) {
+        const asset = result.assets[0];
+        setVideoThumbnail(asset);
+        setUploadingThumbnail(true);
+
+        try {
+          const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+          const base64String = `data:image/jpeg;base64,${base64}`;
+
+          const adAccountId = await AsyncStorage.getItem("fb_ad_account_id") || await AsyncStorage.getItem("act_ad_account_id");
+          const accessToken = await AsyncStorage.getItem("fb_access_token");
+
+          if (!adAccountId || !accessToken) {
+            throw new Error("Missing ad account ID or access token");
+          }
+
+          const uploadResponse = await axios.post(
+            `${API_BASE_URL}/ads/upload-image`,
+            {
+              adAccountId,
+              imageBase64: base64String,
+              pageId: formData.page_id || campaignData?.page_id,
+            },
+            {
+              headers: {
+                "x-fb-access-token": accessToken,
+              },
+            }
+          );
+
+          if (uploadResponse.data.success && uploadResponse.data.imageHash) {
+            setThumbnailImageHash(uploadResponse.data.imageHash);
+            console.log("✅ Thumbnail uploaded successfully. Image Hash:", uploadResponse.data.imageHash);
+          } else {
+            throw new Error(uploadResponse.data.error || "Upload failed");
+          }
+        } catch (error) {
+          console.error("Error uploading thumbnail:", error);
+          Alert.alert("Error", `Failed to upload thumbnail: ${error.response?.data?.error || error.message}`);
+          setVideoThumbnail(null);
+          setThumbnailImageHash(null);
+        } finally {
+          setUploadingThumbnail(false);
+        }
+      }
+    } catch (error) {
+      console.error("Error selecting thumbnail:", error);
+      Alert.alert("Error", "Failed to select thumbnail");
+      setUploadingThumbnail(false);
+    }
+  };
+
+  const handleRemoveThumbnail = () => {
+    setVideoThumbnail(null);
+    setThumbnailImageHash(null);
+  };
+
+  const handleMediaTypeChange = (type) => {
+    setMediaType(type);
+    if (type === "image") {
+      handleRemoveVideo();
+    } else {
+      handleRemoveImage();
+    }
+  };
+
   const fetchPages = async () => {
     try {
       setLoadingPages(true);
@@ -156,12 +327,33 @@ export default function WhatsAppAdCreative({ campaignData, onNext, onBack }) {
       Alert.alert("Error", "Please select Page ID");
       return;
     }
-    if (!formData.picture_url.trim()) {
-      Alert.alert("Error", "Please enter Picture URL");
+    // Validate media based on type
+    if (mediaType === "image" && !formData.picture_url.trim()) {
+      Alert.alert("Error", "Please upload an image or enter Picture URL");
+      return;
+    }
+    if (mediaType === "video" && !videoId) {
+      Alert.alert("Error", "Please upload a video");
+      return;
+    }
+    if (mediaType === "video" && !thumbnailImageHash) {
+      Alert.alert("Error", "Please upload a thumbnail image for the video. Meta requires a thumbnail for video ads.");
       return;
     }
     if (!formData.business_page_url.trim()) {
       Alert.alert("Error", "Please enter Business Page URL");
+      return;
+    }
+    if (!formData.primary_text.trim()) {
+      Alert.alert("Error", "Please enter Primary Text");
+      return;
+    }
+    if (!formData.headline.trim()) {
+      Alert.alert("Error", "Please enter Headline");
+      return;
+    }
+    if (formData.headline.length > 27) {
+      Alert.alert("Error", "Headline must be 27 characters or less");
       return;
     }
 
@@ -180,9 +372,21 @@ export default function WhatsAppAdCreative({ campaignData, onNext, onBack }) {
         fb_token: fbToken,
         name: formData.name,
         page_id: formData.page_id,
-        picture_url: formData.picture_url,
         business_page_url: formData.business_page_url,
+        primary_text: formData.primary_text,
+        headline: formData.headline,
+        description: formData.description || "",
       };
+
+      // Add media based on type
+      if (mediaType === "image") {
+        creativePayload.picture_url = formData.picture_url;
+      } else if (mediaType === "video") {
+        creativePayload.video_id = videoId;
+        if (thumbnailImageHash) {
+          creativePayload.image_hash = thumbnailImageHash;
+        }
+      }
 
       const response = await axios.post(
         `${API_BASE_URL}/click-to-whatsapp/adcreatives`,
@@ -276,24 +480,135 @@ export default function WhatsAppAdCreative({ campaignData, onNext, onBack }) {
               buttonTextStyle={{ fontSize: 16, color: !formData.page_id ? "#8B9DC3" : "#1C1E21", textAlign: "left" }}
             />
           ) : (
-            <TextInput
-              style={styles.input}
-              placeholder="Enter your Facebook Page ID"
-              value={formData.page_id}
-              onChangeText={(text) => setFormData({ ...formData, page_id: text })}
-            />
+            <View style={styles.noPagesContainer}>
+              <Text style={styles.noPagesText}>No Facebook pages found</Text>
+              <TouchableOpacity
+                style={styles.createPageButton}
+                onPress={() => {
+                  Linking.openURL("https://www.facebook.com/pages/create");
+                }}
+              >
+                <MaterialCommunityIcons name="plus-circle" size={20} color="#fff" style={{ marginRight: 8 }} />
+                <Text style={styles.createPageButtonText}>Create Facebook Page</Text>
+              </TouchableOpacity>
+              <Text style={styles.orText}>OR</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter Facebook Page ID manually"
+                value={formData.page_id}
+                onChangeText={(text) => setFormData({ ...formData, page_id: text })}
+              />
+            </View>
           )}
+        </View>
+
+        <View style={styles.inputContainer}>
+          <View style={styles.labelRow}>
+            <MaterialCommunityIcons name="text" size={20} color="#9333EA" />
+            <Text style={styles.label}>
+              Primary Text <Text style={styles.required}>*</Text>
+            </Text>
+          </View>
+          <TextInput
+            style={[styles.input, { minHeight: 80, textAlignVertical: "top" }]}
+            placeholder="Enter primary text for your ad"
+            value={formData.primary_text}
+            onChangeText={(text) => setFormData({ ...formData, primary_text: text })}
+            multiline
+            numberOfLines={4}
+          />
+          <Text style={styles.hint}>The main text that appears in your ad</Text>
+        </View>
+
+        <View style={styles.inputContainer}>
+          <View style={styles.labelRow}>
+            <MaterialCommunityIcons name="format-title" size={20} color="#9333EA" />
+            <Text style={styles.label}>
+              Headline <Text style={styles.required}>*</Text>
+            </Text>
+          </View>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter headline for your ad"
+            value={formData.headline}
+            onChangeText={(text) => setFormData({ ...formData, headline: text })}
+            maxLength={27}
+          />
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+            <Text style={styles.hint}>Maximum 27 characters. Appears above the primary text</Text>
+            {formData.headline.length > 0 && (
+              <Text style={[styles.hint, { color: formData.headline.length > 27 ? "#EF4444" : "#606770" }]}>
+                {formData.headline.length}/27
+              </Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.inputContainer}>
+          <View style={styles.labelRow}>
+            <MaterialCommunityIcons name="text-subject" size={20} color="#9333EA" />
+            <Text style={styles.label}>
+              Description
+            </Text>
+          </View>
+          <TextInput
+            style={[styles.input, { minHeight: 80, textAlignVertical: "top" }]}
+            placeholder="Enter description for your ad (optional)"
+            value={formData.description}
+            onChangeText={(text) => setFormData({ ...formData, description: text })}
+            multiline
+            numberOfLines={4}
+          />
+          <Text style={styles.hint}>Additional text that appears below the headline (optional)</Text>
         </View>
 
         <View style={styles.inputContainer}>
           <View style={styles.labelRow}>
             <MaterialCommunityIcons name="image" size={20} color="#9333EA" />
             <Text style={styles.label}>
-              Picture <Text style={styles.required}>*</Text>
+              Media (Image or Video) <Text style={styles.required}>*</Text>
             </Text>
+          </View>
+
+          {/* Media Type Selection */}
+          <View style={styles.mediaTypeContainer}>
+            <TouchableOpacity
+              style={[
+                styles.mediaTypeButton,
+                mediaType === "image" && styles.mediaTypeButtonActive,
+              ]}
+              onPress={() => handleMediaTypeChange("image")}
+            >
+              <Text
+                style={[
+                  styles.mediaTypeButtonText,
+                  mediaType === "image" && styles.mediaTypeButtonTextActive,
+                ]}
+              >
+                Image
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.mediaTypeButton,
+                mediaType === "video" && styles.mediaTypeButtonActive,
+              ]}
+              onPress={() => handleMediaTypeChange("video")}
+            >
+              <Text
+                style={[
+                  styles.mediaTypeButtonText,
+                  mediaType === "video" && styles.mediaTypeButtonTextActive,
+                ]}
+              >
+                Video
+              </Text>
+            </TouchableOpacity>
           </View>
           
           {/* Image Upload Section */}
+          {mediaType === "image" && (
+            <>
           {!imagePreview && !formData.picture_url && (
             <TouchableOpacity
               style={styles.imageUploadButton}
@@ -358,6 +673,83 @@ export default function WhatsAppAdCreative({ campaignData, onNext, onBack }) {
               />
             </View>
           )}
+            </>
+          )}
+
+          {/* Video Upload Section */}
+          {mediaType === "video" && (
+            <View>
+              {!videoPreview && !videoId && (
+                <TouchableOpacity
+                  style={styles.imageUploadButton}
+                  onPress={handleVideoSelect}
+                  disabled={uploadingVideo}
+                >
+                  <MaterialCommunityIcons name="video" size={24} color="#9333EA" />
+                  <Text style={styles.imageUploadText}>Tap to upload video</Text>
+                  <Text style={styles.imageUploadSubtext}>MP4, MOV, AVI up to 500MB</Text>
+                </TouchableOpacity>
+              )}
+
+              {videoId && !uploadingVideo && (
+                <View style={styles.successContainer}>
+                  <View style={styles.successBox}>
+                    <MaterialCommunityIcons name="check-circle" size={20} color="#10B981" />
+                    <Text style={styles.successText}>Video uploaded successfully (ID: {videoId})</Text>
+                    <TouchableOpacity onPress={handleRemoveVideo}>
+                      <MaterialCommunityIcons name="close" size={18} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {uploadingVideo && (
+                <View style={styles.uploadingContainer}>
+                  <ActivityIndicator size="large" color="#9333EA" />
+                  <Text style={styles.uploadingText}>Uploading video to Meta...</Text>
+                  <Text style={styles.uploadingSubtext}>This may take a few minutes</Text>
+                </View>
+              )}
+
+              {/* Video Thumbnail Upload - Required by Meta API */}
+              {videoId && !uploadingVideo && (
+                <View style={styles.thumbnailContainer}>
+                  <Text style={styles.thumbnailTitle}>⚠️ Video Thumbnail Required</Text>
+                  <Text style={styles.thumbnailSubtext}>
+                    Meta requires a thumbnail image for video ads. Please upload an image.
+                  </Text>
+                  {!thumbnailImageHash && !videoThumbnail && (
+                    <TouchableOpacity
+                      style={[styles.imageUploadButton, { marginTop: 12, backgroundColor: "#FEF3C7", borderColor: "#FCD34D" }]}
+                      onPress={handleThumbnailSelect}
+                      disabled={uploadingThumbnail}
+                    >
+                      <MaterialCommunityIcons name="image" size={24} color="#D97706" />
+                      <Text style={[styles.imageUploadText, { color: "#92400E" }]}>Upload Thumbnail Image</Text>
+                      <Text style={[styles.imageUploadSubtext, { color: "#78350F" }]}>PNG, JPG up to 10MB</Text>
+                    </TouchableOpacity>
+                  )}
+                  {thumbnailImageHash && (
+                    <View style={styles.successContainer}>
+                      <View style={styles.successBox}>
+                        <MaterialCommunityIcons name="check-circle" size={20} color="#10B981" />
+                        <Text style={styles.successText}>Thumbnail uploaded</Text>
+                        <TouchableOpacity onPress={handleRemoveThumbnail}>
+                          <MaterialCommunityIcons name="close" size={18} color="#EF4444" />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                  {uploadingThumbnail && (
+                    <View style={styles.uploadingContainer}>
+                      <ActivityIndicator size="small" color="#9333EA" />
+                      <Text style={styles.uploadingText}>Uploading thumbnail...</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         <View style={styles.inputContainer}>
@@ -386,7 +778,7 @@ export default function WhatsAppAdCreative({ campaignData, onNext, onBack }) {
           <TouchableOpacity
             style={[styles.button, styles.primaryButton, loading && styles.buttonDisabled]}
             onPress={handleSubmit}
-            disabled={loading}
+            disabled={loading || uploadingVideo}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
@@ -597,6 +989,103 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#606770",
     marginBottom: 8,
+  },
+  noPagesContainer: {
+    alignItems: "center",
+    paddingVertical: 16,
+  },
+  noPagesText: {
+    fontSize: 14,
+    color: "#606770",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  createPageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1877F2",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginBottom: 16,
+    width: "100%",
+  },
+  createPageButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  orText: {
+    fontSize: 12,
+    color: "#8B9DC3",
+    marginBottom: 12,
+    textTransform: "uppercase",
+  },
+  mediaTypeContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
+  },
+  mediaTypeButton: {
+    flex: 1,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mediaTypeButtonActive: {
+    backgroundColor: "#9333EA",
+    borderColor: "#9333EA",
+  },
+  mediaTypeButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#6B7280",
+  },
+  mediaTypeButtonTextActive: {
+    color: "#fff",
+  },
+  thumbnailContainer: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: "#FEF3C7",
+    borderWidth: 1,
+    borderColor: "#FCD34D",
+    borderRadius: 8,
+  },
+  thumbnailTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#92400E",
+    marginBottom: 4,
+  },
+  thumbnailSubtext: {
+    fontSize: 12,
+    color: "#78350F",
+    marginBottom: 12,
+  },
+  uploadingContainer: {
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#EFF6FF",
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  uploadingText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#1E40AF",
+    marginTop: 8,
+  },
+  uploadingSubtext: {
+    fontSize: 12,
+    color: "#3B82F6",
+    marginTop: 4,
   },
 });
 

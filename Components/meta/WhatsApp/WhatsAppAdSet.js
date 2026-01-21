@@ -10,6 +10,7 @@ import {
   ScrollView,
   FlatList,
   Modal,
+  Linking,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -721,12 +722,25 @@ export default function WhatsAppAdSet({ campaignData, onNext, onBack }) {
                 buttonTextStyle={{ fontSize: 16, color: !formData.page_id ? "#8B9DC3" : "#1C1E21", textAlign: "left" }}
               />
             ) : (
-              <TextInput
-                style={styles.input}
-                placeholder="Enter Facebook Page ID"
-                value={formData.page_id}
-                onChangeText={(text) => setFormData({ ...formData, page_id: text })}
-              />
+              <View style={styles.noPagesContainer}>
+                <Text style={styles.noPagesText}>No Facebook pages found</Text>
+                <TouchableOpacity
+                  style={styles.createPageButton}
+                  onPress={() => {
+                    Linking.openURL("https://www.facebook.com/pages/create");
+                  }}
+                >
+                  <MaterialCommunityIcons name="plus-circle" size={20} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.createPageButtonText}>Create Facebook Page</Text>
+                </TouchableOpacity>
+                <Text style={styles.orText}>OR</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter Facebook Page ID manually"
+                  value={formData.page_id}
+                  onChangeText={(text) => setFormData({ ...formData, page_id: text })}
+                />
+              </View>
             )}
           </View>
           <View style={[styles.inputContainer, { flex: 1 }]}>
@@ -830,14 +844,26 @@ export default function WhatsAppAdSet({ campaignData, onNext, onBack }) {
 
             {/* Success Message */}
             {verificationStatus === "VERIFIED" && (
-              <View style={[styles.inputContainer, { backgroundColor: "#D1FAE5", padding: 12, borderRadius: 8, marginTop: 10 }]}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                  <MaterialCommunityIcons name="check-circle" size={20} color="#10B981" />
-                  <Text style={{ color: "#065F46", fontSize: 14, fontWeight: "600" }}>
-                    WhatsApp number verified successfully!
-                  </Text>
+              <>
+                <View style={[styles.inputContainer, { backgroundColor: "#D1FAE5", padding: 12, borderRadius: 8, marginTop: 10 }]}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <MaterialCommunityIcons name="check-circle" size={20} color="#10B981" />
+                    <Text style={{ color: "#065F46", fontSize: 14, fontWeight: "600" }}>
+                      WhatsApp number verified successfully!
+                    </Text>
+                  </View>
                 </View>
-              </View>
+                {/* Change Primary WhatsApp Number Button */}
+                <TouchableOpacity
+                  style={styles.changeWhatsAppButton}
+                  onPress={() => {
+                    Linking.openURL("https://www.facebook.com/settings/?tab=linked_whatsapp");
+                  }}
+                >
+                  <MaterialCommunityIcons name="phone-settings" size={18} color="#075E54" style={{ marginRight: 8 }} />
+                  <Text style={styles.changeWhatsAppButtonText}>Change Primary WhatsApp Number</Text>
+                </TouchableOpacity>
+              </>
             )}
 
             {/* Helper Text */}
@@ -1693,6 +1719,56 @@ const styles = StyleSheet.create({
   },
   verifyButtonText: {
     color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  noPagesContainer: {
+    alignItems: "center",
+    paddingVertical: 16,
+  },
+  noPagesText: {
+    fontSize: 14,
+    color: "#606770",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  createPageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1877F2",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginBottom: 16,
+    width: "100%",
+  },
+  createPageButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  orText: {
+    fontSize: 12,
+    color: "#8B9DC3",
+    marginBottom: 12,
+    textTransform: "uppercase",
+  },
+  changeWhatsAppButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#D1FAE5",
+    borderWidth: 1,
+    borderColor: "#10B981",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginTop: 12,
+    width: "100%",
+  },
+  changeWhatsAppButtonText: {
+    color: "#065F46",
     fontSize: 14,
     fontWeight: "600",
   },

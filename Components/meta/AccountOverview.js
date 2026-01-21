@@ -533,7 +533,7 @@ export default function AccountOverview() {
               </View>
               <View style={[styles.statCard, styles.statCardOrange]}>
                 <View style={styles.statHeader}>
-                  <MaterialCommunityIcons name="currency-usd" size={20} color="#F59E0B" />
+                  <MaterialCommunityIcons name="currency-inr" size={20} color="#F59E0B" />
                   <Text style={styles.statLabel}>Amount Spent</Text>
                 </View>
                 <Text style={styles.statValueSmall}>

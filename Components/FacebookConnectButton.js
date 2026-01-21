@@ -74,15 +74,40 @@ export default function FacebookConnectButton({
     setIsConnecting(true);
 
     try {
+      // Exchange short-lived token for long-lived token
+      let longLivedToken = token;
+      try {
+        console.log('🔄 Attempting to exchange short-lived token for long-lived token...');
+        const exchangeResponse = await axios.post(`${API_BASE_URL}/exchange-token`, {
+          token: token.trim()
+        });
+        if (exchangeResponse.data.success) {
+          longLivedToken = exchangeResponse.data.access_token;
+          console.log('✅ Successfully exchanged for long-lived token');
+          console.log('  - Long-lived token length:', longLivedToken?.length || 0);
+        } else {
+          console.warn('⚠️ Token exchange response not successful:', exchangeResponse.data);
+        }
+      } catch (exchangeError) {
+        console.warn('⚠️ Failed to exchange token, using short-lived token');
+        console.warn('  - Error:', exchangeError.response?.data?.error || exchangeError.message);
+        console.warn('  - Status:', exchangeError.response?.status);
+        // Continue with original token if exchange fails
+      }
+
+      // Save token first (even before validating with ad accounts)
+      // This ensures token is saved even if ad accounts fetch fails
+      await AsyncStorage.setItem('fb_access_token', longLivedToken);
+      console.log('✅ Token saved to AsyncStorage:', longLivedToken ? longLivedToken.substring(0, 20) + '...' : 'null');
+
       // Fetch ad accounts using the dedicated endpoint
       const response = await axios.get(`${API_BASE_URL}/campaigns`, {
         headers: {
-          'x-fb-access-token': token,
+          'x-fb-access-token': longLivedToken,
         },
       });
 
       if (response.data.success) {
-        await AsyncStorage.setItem('fb_access_token', token);
         
         // Get ad accounts from response
         const accounts = response.data.adAccounts?.data || [];
@@ -109,7 +134,7 @@ export default function FacebookConnectButton({
             'Your Meta account has been connected successfully!'
           );
           setIsConnecting(false);
-          if (onSuccess) onSuccess(token, accountId);
+          if (onSuccess) onSuccess(longLivedToken, accountId);
         } else {
           // Multiple accounts - show selection
           setAdAccounts(validAccounts);
@@ -120,6 +145,18 @@ export default function FacebookConnectButton({
       }
     } catch (error) {
       console.error('Connection error:', error);
+      
+      // If token was saved but validation failed, keep it saved
+      // Only clear token if it's actually invalid (401/403 errors)
+      const isTokenError = error.response?.status === 401 || error.response?.status === 403;
+      if (isTokenError) {
+        console.warn('⚠️ Token validation failed, clearing saved token');
+        await AsyncStorage.removeItem('fb_access_token');
+      } else {
+        // For other errors (network, etc.), keep the token saved
+        console.log('✅ Token kept in storage despite validation error');
+      }
+      
       Alert.alert(
         'Error',
         error.response?.data?.fb?.message ||

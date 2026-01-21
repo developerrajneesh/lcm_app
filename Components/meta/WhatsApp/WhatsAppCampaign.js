@@ -75,58 +75,69 @@ export default function WhatsAppCampaign({ onNext, onBack }) {
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <View style={[styles.iconContainer, { backgroundColor: "#F3E8FF" }]}>
-          <MaterialCommunityIcons name="whatsapp" size={32} color="#9333EA" />
+    <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
+      {/* Gradient Header */}
+      <View style={styles.headerGradient}>
+        <View style={styles.headerContent}>
+          <View style={styles.iconContainer}>
+            <MaterialCommunityIcons name="whatsapp" size={48} color="#fff" />
+          </View>
+          <View style={styles.headerText}>
+            <Text style={styles.title} numberOfLines={1}>Create WhatsApp Campaign</Text>
+            <Text style={styles.subtitle} numberOfLines={1}>Enable direct WhatsApp conversations from your ads</Text>
+          </View>
         </View>
-        <View style={styles.headerText}>
-          <Text style={styles.title}>Create WhatsApp Campaign</Text>
-          <Text style={styles.subtitle}>Enable direct WhatsApp conversations from your ads</Text>
-        </View>
+        {/* Decorative circles */}
+        <View style={styles.decorativeCircle1} />
+        <View style={styles.decorativeCircle2} />
       </View>
 
       <View style={styles.form}>
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>
+          <Text style={styles.label} numberOfLines={1}>
             Campaign Name <Text style={styles.required}>*</Text>
           </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Enter campaign name"
-            value={campaignName}
-            onChangeText={setCampaignName}
-          />
+          <View style={styles.inputWrapper}>
+            <TextInput
+              style={styles.input}
+              placeholder="Enter campaign name"
+              placeholderTextColor="#9CA3AF"
+              value={campaignName}
+              onChangeText={setCampaignName}
+            />
+          </View>
         </View>
 
         <View style={styles.inputContainer}>
-          <Text style={styles.label}>
+          <Text style={styles.label} numberOfLines={1}>
             Objective <Text style={styles.required}>*</Text>
           </Text>
-          <View style={[styles.objectiveBox, { borderColor: "#9333EA", backgroundColor: "#F3E8FF" }]}>
+          <View style={styles.objectiveBox}>
             <View style={styles.objectiveContent}>
-              <Text style={styles.objectiveText}>Engagement</Text>
-              <Text style={styles.objectiveCode}>(OUTCOME_ENGAGEMENT)</Text>
+              <Text style={styles.objectiveText} numberOfLines={1}>Engagement</Text>
+              <Text style={styles.objectiveCode} numberOfLines={1}>(OUTCOME_ENGAGEMENT)</Text>
             </View>
-            <MaterialCommunityIcons name="check" size={20} color="#10B981" />
+            <View style={styles.checkIconContainer}>
+              <MaterialCommunityIcons name="check-circle" size={28} color="#10B981" />
+            </View>
           </View>
         </View>
 
         <View style={styles.buttonRow}>
           {onBack && (
-            <TouchableOpacity style={[styles.button, styles.backButton]} onPress={onBack}>
-              <Text style={styles.backButtonText}>Back</Text>
+            <TouchableOpacity style={styles.backButton} onPress={onBack}>
+              <Text style={styles.backButtonText} numberOfLines={1}>Back</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            style={[styles.button, styles.primaryButton, loading && styles.buttonDisabled]}
+            style={[styles.primaryButton, loading && styles.buttonDisabled]}
             onPress={handleCreate}
             disabled={loading || !campaignName.trim()}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.primaryButtonText}>Next</Text>
+              <Text style={styles.primaryButtonText} numberOfLines={1}>Next</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -138,110 +149,186 @@ export default function WhatsAppCampaign({ onNext, onBack }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#F9FAFB",
   },
-  header: {
-    flexDirection: "row",
+  contentContainer: {
+    paddingBottom: 30,
+  },
+  headerGradient: {
+    backgroundColor: "#075E54",
+    paddingTop: 30,
+    paddingBottom: 30,
+    paddingHorizontal: 20,
+    position: "relative",
+    overflow: "hidden",
+  },
+  headerContent: {
+    flexDirection: "column",
     alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E4E6EB",
+    zIndex: 10,
   },
   iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 16,
+    marginBottom: 16,
+    borderWidth: 3,
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
   headerText: {
-    flex: 1,
+    width: "100%",
+    alignItems: "center",
   },
   title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#1C1E21",
-    marginBottom: 4,
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    marginBottom: 6,
+    letterSpacing: 0.3,
+    textAlign: "center",
   },
   subtitle: {
-    fontSize: 14,
-    color: "#606770",
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  decorativeCircle1: {
+    position: "absolute",
+    top: -40,
+    right: -40,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  decorativeCircle2: {
+    position: "absolute",
+    bottom: -30,
+    left: -30,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
   },
   form: {
-    padding: 20,
+    padding: 24,
   },
   inputContainer: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   label: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#1C1E21",
-    marginBottom: 8,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1F2937",
+    marginBottom: 10,
+    letterSpacing: 0.3,
   },
   required: {
-    color: "#FF0000",
+    color: "#EF4444",
+    fontWeight: "800",
+  },
+  inputWrapper: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#D8DEE6",
-    borderRadius: 8,
-    padding: 12,
+    padding: 16,
     fontSize: 16,
-    backgroundColor: "#fff",
+    color: "#1F2937",
+    fontWeight: "500",
   },
   objectiveBox: {
-    borderWidth: 2,
-    borderRadius: 8,
-    padding: 16,
+    backgroundColor: "#D1FAE5",
+    borderRadius: 16,
+    padding: 20,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    borderWidth: 2,
+    borderColor: "#10B981",
+    shadowColor: "#10B981",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 5,
   },
   objectiveContent: {
     flex: 1,
+    marginRight: 12,
   },
   objectiveText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1C1E21",
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#065F46",
     marginBottom: 4,
+    letterSpacing: 0.3,
   },
   objectiveCode: {
-    fontSize: 12,
-    color: "#606770",
+    fontSize: 13,
+    color: "#047857",
+    fontWeight: "600",
+  },
+  checkIconContainer: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 4,
   },
   buttonRow: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 20,
-  },
-  button: {
-    flex: 1,
-    padding: 14,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
+    gap: 16,
+    marginTop: 32,
   },
   backButton: {
-    backgroundColor: "#8B9DC3",
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#6B7280",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   backButtonText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
   primaryButton: {
-    backgroundColor: "#9333EA",
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#25D366",
+    shadowColor: "#25D366",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   primaryButtonText: {
-    color: "#fff",
+    color: "#FFFFFF",
     fontSize: 16,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.5,
   },
   buttonDisabled: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
 });
 

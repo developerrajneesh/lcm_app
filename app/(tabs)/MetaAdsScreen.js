@@ -14,7 +14,9 @@ import { useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
+  Dimensions,
   Image,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -78,6 +80,7 @@ const Header = ({ userId }) => (
 
 // Tab Navigation Component
 const TabNavigation = ({ activeTab, setActiveTab }) => {
+  const screenWidth = Dimensions.get("window").width;
   const tabs = [
     { id: "overview", label: "Overview" },
     { id: "create", label: "Create" },
@@ -85,19 +88,31 @@ const TabNavigation = ({ activeTab, setActiveTab }) => {
     { id: "analytics", label: "Analytics" },
   ];
 
+  // Calculate dynamic padding and font size based on screen width
+  const tabPadding = screenWidth < 360 ? 8 : screenWidth < 400 ? 12 : 16;
+  const baseFontSize = screenWidth < 360 ? 11 : screenWidth < 400 ? 12 : 14;
+
   return (
     <View style={styles.tabsContainer}>
       {tabs.map((tab) => (
         <TouchableOpacity
           key={tab.id}
-          style={[styles.tab, activeTab === tab.id && styles.activeTab]}
+          style={[
+            styles.tab,
+            { paddingHorizontal: tabPadding, paddingVertical: tabPadding },
+            activeTab === tab.id && styles.activeTab,
+          ]}
           onPress={() => setActiveTab(tab.id)}
         >
           <Text
             style={[
               styles.tabText,
+              { fontSize: baseFontSize },
               activeTab === tab.id && styles.activeTabText,
             ]}
+            numberOfLines={1}
+            adjustsFontSizeToFit={true}
+            minimumFontScale={0.7}
           >
             {tab.label}
           </Text>
@@ -437,12 +452,25 @@ const AdSetDetails = ({
                 }
               />
             ) : (
-              <TextInput
-                style={styles.input}
-                placeholder="Enter Facebook Page ID"
-                value={pageId}
-                onChangeText={setPageId}
-              />
+              <View style={styles.noPagesContainer}>
+                <Text style={styles.noPagesText}>No Facebook pages found</Text>
+                <TouchableOpacity
+                  style={styles.createPageButton}
+                  onPress={() => {
+                    Linking.openURL("https://www.facebook.com/pages/create");
+                  }}
+                >
+                  <MaterialCommunityIcons name="plus-circle" size={20} color="#fff" style={{ marginRight: 8 }} />
+                  <Text style={styles.createPageButtonText}>Create Facebook Page</Text>
+                </TouchableOpacity>
+                <Text style={styles.orText}>OR</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Enter Facebook Page ID manually"
+                  value={pageId}
+                  onChangeText={setPageId}
+                />
+              </View>
             )}
           </View>
           <View style={[styles.inputContainer, { flex: 1 }]}>
@@ -2677,8 +2705,7 @@ const MetaAdsScreen = () => {
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1.91, 1], // Recommended aspect ratio for ads (1200x628)
+        allowsEditing: false,
         quality: 0.8,
       });
 
@@ -3622,7 +3649,7 @@ const MetaAdsScreen = () => {
               {step === 0 && (
                 <>
                   {/* Campaign Type Selection Screen */}
-                  <View style={styles.section}>
+                  <View>
                     <SectionHeader title="Select Campaign Type" />
                     <Text style={[styles.inputLabel, { marginBottom: 20, textAlign: "center" }]}>
                       Choose the type of campaign you want to create
@@ -3633,7 +3660,7 @@ const MetaAdsScreen = () => {
                       <TouchableOpacity
                         style={[
                           styles.campaignTypeCard,
-                          { backgroundColor: "#9333EA" }, // Purple
+                          { backgroundColor: "#075E54" }, // Dark Green
                           campaignType === "whatsapp" && styles.campaignTypeCardSelected,
                         ]}
                         onPress={() => {
@@ -3641,7 +3668,7 @@ const MetaAdsScreen = () => {
                           setStep(1);
                         }}
                       >
-                        <FontAwesome name="whatsapp" size={40} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
+                        <FontAwesome name="whatsapp" size={50} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
                         <Text style={styles.campaignTypeText}>Click to WhatsApp</Text>
                       </TouchableOpacity>
 
@@ -3657,11 +3684,11 @@ const MetaAdsScreen = () => {
                           setStep(1);
                         }}
                       >
-                        <Feather name="phone" size={40} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
+                        <Feather name="phone" size={50} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
                         <Text style={styles.campaignTypeText}>Click to Call</Text>
                       </TouchableOpacity>
 
-                      {/* Click to Link */}
+                      {/* Click to Website */}
                       <TouchableOpacity
                         style={[
                           styles.campaignTypeCard,
@@ -3673,8 +3700,8 @@ const MetaAdsScreen = () => {
                           setStep(1);
                         }}
                       >
-                        <Feather name="link" size={40} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
-                        <Text style={styles.campaignTypeText}>Click to Link</Text>
+                        <Feather name="link" size={50} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
+                        <Text style={styles.campaignTypeText}>Click to Website</Text>
                       </TouchableOpacity>
 
                       {/* Lead Form Ads */}
@@ -3689,7 +3716,7 @@ const MetaAdsScreen = () => {
                           setStep(1);
                         }}
                       >
-                        <MaterialIcons name="description" size={40} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
+                        <MaterialIcons name="description" size={50} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
                         <Text style={styles.campaignTypeText}>Lead Form Ads</Text>
                       </TouchableOpacity>
                     </View>
@@ -4068,15 +4095,15 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    padding: 16,
     alignItems: "center",
     justifyContent: "center",
+    minWidth: 0, // Allows flex items to shrink below their content size
     // position: "relative",
   },
   tabText: {
     color: "#606770",
     fontWeight: "600",
-    fontSize: 14,
+    textAlign: "center",
   },
   activeTabText: {
     color: "#1877F2",
@@ -4326,17 +4353,17 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   campaignTypeCard: {
-    width: "45%",
-    aspectRatio: 1.2,
-    borderRadius: 16,
-    padding: 20,
+    width: "48%",
+    aspectRatio: 1.1,
+    borderRadius: 20,
+    padding: 30,
     justifyContent: "center",
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 5,
   },
   campaignTypeCardSelected: {
     borderWidth: 3,
@@ -4345,10 +4372,10 @@ const styles = StyleSheet.create({
   },
   campaignTypeText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
-    marginTop: 10,
+    marginTop: 12,
   },
   modalOverlay: {
     flex: 1,
@@ -4490,6 +4517,38 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#1e293b",
     fontWeight: "500",
+  },
+  noPagesContainer: {
+    alignItems: "center",
+    paddingVertical: 16,
+  },
+  noPagesText: {
+    fontSize: 14,
+    color: "#606770",
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  createPageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1877F2",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    marginBottom: 16,
+    width: "100%",
+  },
+  createPageButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  orText: {
+    fontSize: 12,
+    color: "#8B9DC3",
+    marginBottom: 12,
+    textTransform: "uppercase",
   },
 });
 

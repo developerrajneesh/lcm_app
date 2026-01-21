@@ -8,16 +8,18 @@
     "scheme": "lcm",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true
-    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/LCMLOGO.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
+      "googleServicesFile": "./google-services.json",
       "package": "com.leadscraft.Lcm",
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -34,12 +36,21 @@
         }
       ]
     },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
+      }
+    },
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/LCMLOGO.png"
     },
     "plugins": [
+      "expo-dev-client",
       "expo-router",
       [
         "expo-splash-screen",
@@ -49,6 +60,17 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/LCMLOGO.png",
+          "color": "#ffffff",
+          "sounds": [],
+          "mode": "production",
+          "androidMode": "default",
+          "iosDisplayInForeground": true
+        }
       ]
     ],
     "experiments": {
@@ -57,9 +79,8 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e00bfff7-486a-4c24-91af-3526a83915d1"
+        "projectId": "bcb3b5b5-66a7-461a-8d08-ce599f5c02ef"
       }
-    },
-    "owner": "leadscraft"
+    }
   }
 }

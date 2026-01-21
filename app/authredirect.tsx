@@ -49,16 +49,34 @@ export default function AuthRedirect() {
 
   const handleFacebookToken = async (token: string) => {
     try {
+      // Exchange short-lived token for long-lived token
+      let longLivedToken = token;
+      try {
+        const exchangeResponse = await axios.post(`${API_BASE_URL}/exchange-token`, {
+          token: token.trim()
+        });
+        if (exchangeResponse.data.success) {
+          longLivedToken = exchangeResponse.data.access_token;
+          console.log("✅ Successfully exchanged for long-lived token");
+        }
+      } catch (exchangeError) {
+        console.warn("⚠️ Failed to exchange token, using short-lived token:", exchangeError.response?.data?.error || exchangeError.message);
+        // Continue with original token if exchange fails
+      }
+
+      // Save long-lived token to AsyncStorage first
+      // This ensures token is saved even if ad accounts validation fails
+      await AsyncStorage.setItem("fb_access_token", longLivedToken);
+      console.log("✅ Token saved to AsyncStorage:", longLivedToken ? longLivedToken.substring(0, 20) + "..." : "null");
+
       // Validate token by fetching ad accounts
       const response = await axios.get(`${API_BASE_URL}/campaigns`, {
         headers: {
-          "x-fb-access-token": token,
+          "x-fb-access-token": longLivedToken,
         },
       });
 
       if (response.data.success) {
-        // Save token to AsyncStorage
-        await AsyncStorage.setItem("fb_access_token", token);
 
         // Get ad accounts from response
         const accounts = response.data.adAccounts?.data || [];
