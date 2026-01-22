@@ -59,7 +59,7 @@ export default function MetaCompaigns() {
         // Token not found - user disconnected, go back to connect screen
         setIsConnected(false);
         Alert.alert("Disconnected", "Your Meta account has been disconnected. Please reconnect to continue.");
-        router.replace("/MetaWorker");
+        router.push("/MetaWorker");
         return;
       }
       setIsConnected(true);
@@ -91,7 +91,7 @@ export default function MetaCompaigns() {
       const { handleTokenExpiration } = require("../../utils/metaErrorHandler");
       const wasTokenExpired = await handleTokenExpiration(error, () => {
         setIsConnected(false);
-        router.replace("/MetaWorker");
+        router.push("/MetaWorker");
       });
       
       if (!wasTokenExpired) {
@@ -180,7 +180,7 @@ export default function MetaCompaigns() {
       setIsConnected(false);
       setRefreshing(false);
       Alert.alert("Disconnected", "Your Meta account has been disconnected. Please reconnect to continue.");
-      router.replace("/MetaWorker");
+      router.push("/MetaWorker");
       return;
     }
     fetchCampaigns(false); // Reset pagination on refresh
@@ -336,10 +336,19 @@ export default function MetaCompaigns() {
             backgroundColor: gradient.from,
           },
         ]}
-        onPress={() => router.push({
-          pathname: "/AdSetsScreen",
-          params: { campaignId: item.id, campaignName: item.name }
-        })}
+        onPress={async () => {
+          // Save campaignId to AsyncStorage for back navigation
+          try {
+            await AsyncStorage.setItem("last_campaign_id", item.id);
+            await AsyncStorage.setItem("last_campaign_name", item.name || "Campaign");
+          } catch (error) {
+            console.error("Error saving campaign data:", error);
+          }
+          router.push({
+            pathname: "/AdSetsScreen",
+            params: { campaignId: item.id, campaignName: item.name }
+          });
+        }}
         activeOpacity={0.9}
       >
         {/* Gradient overlay effect */}

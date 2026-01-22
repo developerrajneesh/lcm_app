@@ -1,9 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   FlatList,
   RefreshControl,
   SafeAreaView,
@@ -18,21 +20,99 @@ import axios from "axios";
 import { API_BASE_URL } from "../../config/api";
 
 export default function AdSetsScreen() {
-  const { campaignId, campaignName } = useLocalSearchParams();
+  const { campaignId: paramCampaignId, campaignName: paramCampaignName } = useLocalSearchParams();
+  const [campaignId, setCampaignId] = useState(paramCampaignId);
+  const [campaignName, setCampaignName] = useState(paramCampaignName);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [loading, setLoading] = useState(true);
   const [adSets, setAdSets] = useState([]);
   const [adAccountId, setAdAccountId] = useState(null);
+  
+  // Hardcoded back navigation: AdSetsScreen -> MetaAdsScreen
+  const isNavigatingRef = useRef(false);
+  
+  const handleBack = () => {
+    // Prevent multiple simultaneous navigations
+    if (isNavigatingRef.current) {
+      return;
+    }
+    
+    try {
+      isNavigatingRef.current = true;
+      
+      // Hardcoded: Always navigate to MetaAdsScreen
+      router.push("/MetaAdsScreen");
+      
+      // Reset flag after navigation
+      setTimeout(() => {
+        isNavigatingRef.current = false;
+      }, 1000);
+    } catch (error) {
+      console.error("Error navigating back from AdSetsScreen:", error);
+      isNavigatingRef.current = false;
+      router.back();
+    }
+  };
+
+  // Hardcoded hardware back: AdSetsScreen -> MetaAdsScreen
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        handleBack();
+        return true;
+      });
+
+      return () => subscription.remove();
+    }, [handleBack])
+  );
+
+  // Load campaignId from params or AsyncStorage
+  useEffect(() => {
+    const loadCampaignData = async () => {
+      // First, try to use params
+      if (paramCampaignId) {
+        setCampaignId(paramCampaignId);
+        setCampaignName(paramCampaignName || "Campaign");
+        return;
+      }
+
+      // If params not available, try to load from AsyncStorage
+      try {
+        const storedCampaignId = await AsyncStorage.getItem("last_campaign_id");
+        const storedCampaignName = await AsyncStorage.getItem("last_campaign_name");
+        
+        if (storedCampaignId) {
+          console.log("📦 [AdSetsScreen] Loaded campaignId from AsyncStorage:", storedCampaignId);
+          setCampaignId(storedCampaignId);
+          setCampaignName(storedCampaignName || "Campaign");
+        } else {
+          // No campaignId found - keep user in Meta Ads flow
+          console.log("⚠️ [AdSetsScreen] Campaign ID not found, navigating to MetaAdsScreen");
+          router.push("/MetaAdsScreen");
+        }
+      } catch (error) {
+        console.error("❌ [AdSetsScreen] Error loading campaign data:", error);
+        router.push("/MetaAdsScreen");
+      }
+    };
+
+    loadCampaignData();
+  }, [paramCampaignId, paramCampaignName]);
+
+  // Update params when they change
+  useEffect(() => {
+    if (paramCampaignId) {
+      setCampaignId(paramCampaignId);
+      setCampaignName(paramCampaignName || "Campaign");
+    }
+  }, [paramCampaignId, paramCampaignName]);
 
   useEffect(() => {
     if (campaignId) {
       loadAdAccountId();
       fetchAdSets();
-    } else {
-      Alert.alert("Error", "Campaign ID not provided");
-      router.back();
     }
   }, [campaignId]);
 
@@ -87,7 +167,7 @@ export default function AdSetsScreen() {
       // Check for token expiration
       const { handleTokenExpiration } = require("../../utils/metaErrorHandler");
       const wasTokenExpired = await handleTokenExpiration(error, () => {
-        router.replace("/MetaWorker");
+        router.push("/MetaWorker");
       });
       
       if (!wasTokenExpired) {
@@ -292,7 +372,7 @@ export default function AdSetsScreen() {
               <Text style={styles.adSetId}>ID: {item.id}</Text>
               {budget && (
                 <Text style={styles.adSetBudget}>
-                  Budget: {budget}
+                  Budget: ₹{budget?.replace("$", "")}
                 </Text>
               )}
               {item.optimizationGoal && (
@@ -389,7 +469,7 @@ export default function AdSetsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => router.back()}
+          onPress={handleBack}
           style={styles.backButton}
         >
           <Ionicons name="arrow-back" size={24} color="#1e293b" />
@@ -419,7 +499,7 @@ export default function AdSetsScreen() {
           <Text style={styles.createButtonText}>Create</Text>
         </TouchableOpacity>
       </View>
-
+      
       <View style={styles.searchContainer}>
         <Ionicons
           name="search"
@@ -490,6 +570,8 @@ export default function AdSetsScreen() {
         </TouchableOpacity>
       </View>
 
+
+    
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#1877F2" />

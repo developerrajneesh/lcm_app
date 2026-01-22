@@ -10,10 +10,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useFocusEffect } from "@react-navigation/native";
-import { useLocalSearchParams } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Dimensions,
   Image,
   Linking,
@@ -62,8 +63,11 @@ import LeadFormLaunch from "../../Components/meta/LeadForm/LeadFormLaunch";
 import SubscribePageWebhooks from "../../Components/meta/LeadForm/SubscribePageWebhooks";
 
 // Header Component
-const Header = ({ userId }) => (
+const Header = ({ userId, onBack }) => (
   <View style={styles.header}>
+    <TouchableOpacity onPress={onBack} style={styles.backButton}>
+      <Ionicons name="arrow-back" size={24} color="#1C1E21" />
+    </TouchableOpacity>
     <View style={styles.headerLeft}>
       <FontAwesome name="facebook-square" size={28} color="#1877F2" />
       <Text style={styles.headerTitle}>Meta Ads</Text>
@@ -1991,7 +1995,33 @@ const EmptyState = ({ icon, title, text, buttonText, onButtonPress }) => (
 
 // Main Component
 const MetaAdsScreen = () => {
+  const router = useRouter();
   const params = useLocalSearchParams();
+  const isBackNavigatingRef = useRef(false);
+
+  // Hardcoded back navigation: MetaAdsScreen -> Marketing
+  const handleBackToMarketing = useCallback(() => {
+    if (isBackNavigatingRef.current) return;
+    isBackNavigatingRef.current = true;
+
+    router.push("/Marketing");
+
+    setTimeout(() => {
+      isBackNavigatingRef.current = false;
+    }, 1000);
+  }, [router]);
+
+  // Hardcoded hardware back: MetaAdsScreen -> Marketing
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        handleBackToMarketing();
+        return true;
+      });
+
+      return () => subscription.remove();
+    }, [handleBackToMarketing])
+  );
   
   // Campaign type selection (step 0)
   const [campaignType, setCampaignType] = useState(null); // "whatsapp", "call", "link", "lead-form"
@@ -2116,7 +2146,7 @@ const MetaAdsScreen = () => {
   const [accessToken, setAccessToken] = useState("");
   const [adAccountId, setAdAccountId] = useState("");
   const [adAccounts, setAdAccounts] = useState([]);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("manage");
   const [isLoading, setIsLoading] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
   
@@ -3634,8 +3664,8 @@ const MetaAdsScreen = () => {
 
   return (
     <View style={styles.container}>
+      {/* <Header userId={userId} onBack={handleBackToMarketing} /> */}
       <TabNavigation activeTab={activeTab} setActiveTab={setActiveTab} />
-
       {activeTab === "overview" ? (
         <AccountOverview />
       ) : activeTab === "manage" ? (
@@ -3655,7 +3685,7 @@ const MetaAdsScreen = () => {
                       Choose the type of campaign you want to create
                     </Text>
                     
-                    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 15, justifyContent: "center" }}>
+                    <View style={styles.campaignTypeList}>
                       {/* Click to WhatsApp */}
                       <TouchableOpacity
                         style={[
@@ -3668,8 +3698,10 @@ const MetaAdsScreen = () => {
                           setStep(1);
                         }}
                       >
-                        <FontAwesome name="whatsapp" size={50} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
-                        <Text style={styles.campaignTypeText}>Click to WhatsApp</Text>
+                        <View style={styles.campaignTypeRow}>
+                          <FontAwesome name="whatsapp" size={34} color="#fff" style={{ opacity: 0.95 }} />
+                          <Text style={styles.campaignTypeText}>Click to WhatsApp</Text>
+                        </View>
                       </TouchableOpacity>
 
                       {/* Click to Call */}
@@ -3684,8 +3716,10 @@ const MetaAdsScreen = () => {
                           setStep(1);
                         }}
                       >
-                        <Feather name="phone" size={50} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
-                        <Text style={styles.campaignTypeText}>Click to Call</Text>
+                        <View style={styles.campaignTypeRow}>
+                          <Feather name="phone" size={34} color="#fff" style={{ opacity: 0.95 }} />
+                          <Text style={styles.campaignTypeText}>Click to Call</Text>
+                        </View>
                       </TouchableOpacity>
 
                       {/* Click to Website */}
@@ -3700,8 +3734,10 @@ const MetaAdsScreen = () => {
                           setStep(1);
                         }}
                       >
-                        <Feather name="link" size={50} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
-                        <Text style={styles.campaignTypeText}>Click to Website</Text>
+                        <View style={styles.campaignTypeRow}>
+                          <Feather name="link" size={34} color="#fff" style={{ opacity: 0.95 }} />
+                          <Text style={styles.campaignTypeText}>Click to Website</Text>
+                        </View>
                       </TouchableOpacity>
 
                       {/* Lead Form Ads */}
@@ -3716,8 +3752,10 @@ const MetaAdsScreen = () => {
                           setStep(1);
                         }}
                       >
-                        <MaterialIcons name="description" size={50} color="#fff" style={{ opacity: 0.3, marginBottom: 10 }} />
-                        <Text style={styles.campaignTypeText}>Lead Form Ads</Text>
+                        <View style={styles.campaignTypeRow}>
+                          <MaterialIcons name="description" size={34} color="#fff" style={{ opacity: 0.95 }} />
+                          <Text style={styles.campaignTypeText}>Lead Form Ads</Text>
+                        </View>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -4069,6 +4107,10 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
+  backButton: {
+    padding: 8,
+    marginRight: 8,
+  },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
@@ -4353,12 +4395,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   campaignTypeCard: {
-    width: "48%",
-    aspectRatio: 1.1,
+    width: "100%",
+    minHeight: 84,
     borderRadius: 20,
-    padding: 30,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
     justifyContent: "center",
-    alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -4374,8 +4416,16 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 18,
     fontWeight: "700",
-    textAlign: "center",
-    marginTop: 12,
+    marginLeft: 14,
+  },
+  campaignTypeList: {
+    width: "100%",
+    gap: 12,
+    paddingHorizontal: 10,
+  },
+  campaignTypeRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   modalOverlay: {
     flex: 1,

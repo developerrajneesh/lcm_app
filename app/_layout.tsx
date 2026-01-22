@@ -5,10 +5,14 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFCMToken } from "../hooks/useFCMToken";
+import { useNavigationHistory } from "../hooks/useNavigationHistory";
 
 export default function RootLayout() {
   const [userId, setUserId] = useState<string | null>(null);
   const responseListener = useRef<{ remove: () => void } | null>(null);
+  
+  // Use navigation history hook to track and handle back navigation
+  const navigationHistory = useNavigationHistory();
 
   // Load user ID from AsyncStorage
   useEffect(() => {
@@ -84,6 +88,9 @@ export default function RootLayout() {
       }
     };
   }, []);
+
+  // Navigation history hook handles Android back button automatically
+  // It tracks previous screens and navigates back properly
 
   // Log token registration status
   useEffect(() => {

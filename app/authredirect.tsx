@@ -27,7 +27,7 @@ export default function AuthRedirect() {
           "OAuth Error",
           (errorDesc || errorMsg || "Authentication failed") as string
         );
-        router.replace("/MetaWorker");
+        router.push("/MetaWorker");
         return;
       }
 
@@ -38,12 +38,12 @@ export default function AuthRedirect() {
         await handleFacebookToken(accessToken);
       } else {
         Alert.alert("Error", "No access token received");
-        router.replace("/MetaWorker");
+        router.push("/MetaWorker");
       }
     } catch (error) {
       console.error("Auth redirect error:", error);
       Alert.alert("Error", "Failed to process authentication");
-      router.replace("/MetaWorker");
+      router.push("/MetaWorker");
     }
   };
 
@@ -102,7 +102,7 @@ export default function AuthRedirect() {
             "2. Create an ad account\n" +
             "3. Come back here and reconnect your Meta account"
           );
-          router.replace("/MetaWorker");
+          router.push("/MetaWorker");
           return;
         }
 
@@ -117,7 +117,7 @@ export default function AuthRedirect() {
           );
           
           // Navigate to MetaWorker to show campaigns
-          router.replace("/MetaWorker");
+          router.push("/MetaWorker");
         } else {
           // Multiple accounts - save first one for now, or show selector
           // For now, we'll use the first account
@@ -130,7 +130,7 @@ export default function AuthRedirect() {
           );
           
           // Navigate to MetaWorker to show campaigns
-          router.replace("/MetaWorker");
+          router.push("/MetaWorker");
         }
       } else {
         throw new Error("Invalid access token");
@@ -144,7 +144,7 @@ export default function AuthRedirect() {
           error.message ||
           "Failed to connect to Meta. Please check your access token."
       );
-      router.replace("/MetaWorker");
+      router.push("/MetaWorker");
     }
   };
 

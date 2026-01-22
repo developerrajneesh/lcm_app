@@ -590,7 +590,7 @@ const MarketingOptionsScreen = () => {
           Choose the right channel for your campaign
         </Text>
       </View>
-
+      
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}

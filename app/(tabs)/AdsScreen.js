@@ -1,9 +1,11 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   Dimensions,
   FlatList,
   RefreshControl,
@@ -27,15 +29,89 @@ export default function AdsScreen() {
   const [loading, setLoading] = useState(true);
   const [ads, setAds] = useState([]);
   const [adInsights, setAdInsights] = useState({});
+  
+  // Hardcoded back navigation: AdsScreen -> AdSetsScreen
+  const isNavigatingRef = useRef(false);
+  
+  const handleBack = async () => {
+    // Prevent multiple simultaneous navigations
+    if (isNavigatingRef.current) {
+      return;
+    }
+    
+    try {
+      isNavigatingRef.current = true;
+      
+      // Get campaignId from params or AsyncStorage
+      let currentCampaignId = campaignId;
+      let currentCampaignName = campaignName;
+      
+      if (!currentCampaignId) {
+        currentCampaignId = await AsyncStorage.getItem("last_campaign_id");
+        currentCampaignName = await AsyncStorage.getItem("last_campaign_name");
+      }
+      
+      // Always save to AsyncStorage for persistence
+      if (currentCampaignId) {
+        await AsyncStorage.setItem("last_campaign_id", currentCampaignId);
+        if (currentCampaignName) {
+          await AsyncStorage.setItem("last_campaign_name", currentCampaignName);
+        }
+      }
+      
+      // Hardcoded: Always navigate to AdSetsScreen with campaignId
+      if (currentCampaignId) {
+        router.push({
+          pathname: "/AdSetsScreen",
+          params: {
+            campaignId: currentCampaignId,
+            campaignName: currentCampaignName || "Campaign",
+          },
+        });
+      } else {
+        // Fallback: try to go back normally
+        router.back();
+      }
+      
+      // Reset flag after navigation
+      setTimeout(() => {
+        isNavigatingRef.current = false;
+      }, 1000);
+    } catch (error) {
+      console.error("Error navigating back from AdsScreen:", error);
+      isNavigatingRef.current = false;
+      router.back();
+    }
+  };
+
+  // Hardcoded hardware back: AdsScreen -> AdSetsScreen
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        // Don't await inside handler; just trigger and consume event
+        handleBack();
+        return true;
+      });
+
+      return () => subscription.remove();
+    }, [handleBack])
+  );
 
   useEffect(() => {
     if (adsetId) {
+      // Save campaignId to AsyncStorage for back navigation
+      if (campaignId) {
+        AsyncStorage.setItem("last_campaign_id", campaignId);
+        if (campaignName) {
+          AsyncStorage.setItem("last_campaign_name", campaignName);
+        }
+      }
       fetchAds();
     } else {
       Alert.alert("Error", "Ad Set ID not provided");
       router.back();
     }
-  }, [adsetId]);
+  }, [adsetId, campaignId, campaignName]);
 
   const fetchAds = async () => {
     try {
@@ -105,7 +181,7 @@ export default function AdsScreen() {
       // Check for token expiration
       const { handleTokenExpiration } = require("../../utils/metaErrorHandler");
       const wasTokenExpired = await handleTokenExpiration(error, () => {
-        router.replace("/MetaWorker");
+        router.push("/MetaWorker");
       });
       
       if (!wasTokenExpired) {
@@ -510,7 +586,7 @@ export default function AdsScreen() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={handleBack}
         >
           <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
         </TouchableOpacity>
@@ -539,6 +615,8 @@ export default function AdsScreen() {
           <Text style={styles.createButtonText}>Create Ad</Text>
         </TouchableOpacity>
       </View>
+
+    
 
       <View style={styles.controlsContainer}>
         <View style={styles.searchContainer}>
